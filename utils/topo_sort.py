@@ -1,8 +1,12 @@
 """Initialization order utilities for WaterTAP flowsheets.
 
 Uses IDAES SequentialDecomposition as the standard approach per WaterTAP best practices.
-Fails loudly if SequentialDecomposition is not available - we do NOT fall back to
-custom implementations.
+
+Two modes:
+1. **Actual initialization** (model provided): Uses IDAES SequentialDecomposition.
+   Fails loudly if SequentialDecomposition unavailable - NO silent fallback.
+2. **Session planning** (no model yet): Uses simple topological sort for order estimation.
+   This is acceptable since we're just planning, not actually initializing.
 """
 
 from typing import Any, Dict, List, Optional, Tuple

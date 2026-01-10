@@ -2,16 +2,25 @@
 """WaterTAP Engine MCP Server.
 
 FastMCP server exposing WaterTAP flowsheet building and solving capabilities.
-Provides 28 atomic tools organized by category:
+Provides 51 atomic tools organized by category:
 
-- Session Management (4): create_session, get_session, list_sessions, delete_session
-- Registry/Discovery (4): list_units, list_property_packages, list_translators, get_unit_spec
-- Flowsheet Building (5): create_feed, create_unit, create_translator, connect_ports, get_flowsheet_diagram
-- DOF Management (4): get_dof_status, fix_variable, unfix_variable, list_unfixed_vars
-- Scaling (5): get_scaling_status, set_scaling_factor, calculate_scaling_factors, report_scaling_issues, autoscale_large_jac
-- Solver Operations (6): initialize_unit, initialize_flowsheet, propagate_state, check_solve, solve, get_solve_status
-- Zero-Order Specific (3): load_zo_parameters, list_zo_databases, get_zo_unit_parameters
-- Results (3): get_results, get_stream_results, get_costing
+Core Tools (34):
+- Session Management (5): create_session, create_watertap_session, get_session, list_sessions, delete_session
+- Registry/Discovery (4): list_units, list_property_packages, list_translators, get_unit_spec, get_unit_requirements
+- Flowsheet Building (8): create_feed, create_unit, create_translator, connect_ports, connect_units,
+                          update_unit, delete_unit, validate_flowsheet, get_flowsheet_diagram
+- DOF Management (5): get_dof_status, check_dof, fix_variable, unfix_variable, list_unfixed_vars
+- Scaling (6): get_scaling_status, set_scaling_factor, apply_scaling, calculate_scaling_factors,
+               report_scaling_issues, autoscale_large_jac
+
+Solver Operations (10):
+- Initialization (3): initialize_unit, initialize_flowsheet, get_initialization_order, propagate_state
+- Solving (5): check_solve, solve, build_and_solve, get_solve_status, get_job_status, get_job_results
+- Diagnostics (4): run_diagnostics, diagnose_failure, get_constraint_residuals, get_bound_violations
+
+Domain-Specific (7):
+- Zero-Order (3): load_zo_parameters, list_zo_databases, get_zo_unit_parameters
+- Results (4): get_results, get_stream_results, get_unit_results, get_costing
 
 Design Principles:
 - Explicit operations only - NO hidden automation

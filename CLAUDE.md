@@ -5,7 +5,7 @@ MCP server for WaterTAP water treatment process modeling. Provides atomic, expli
 ## Architecture
 
 **Dual Adapter Pattern:**
-- `server.py` - FastMCP server (27 tools) for MCP clients
+- `server.py` - FastMCP server (51 tools) for MCP clients
 - `cli.py` - Typer CLI with same functionality
 
 **Companion Skill:**
@@ -50,7 +50,7 @@ These DO NOT exist:
 
 For non-biological flowsheets, use the SAME property package throughout.
 
-## Tool Categories (27 Total)
+## Tool Categories (51 Total)
 
 ### Session (4)
 - `create_session` - New session with property package
