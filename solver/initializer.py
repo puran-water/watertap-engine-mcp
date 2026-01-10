@@ -1,12 +1,17 @@
 """Flowsheet Initialization for WaterTAP.
 
 Provides tools for sequential initialization of WaterTAP flowsheets
-following topological order and propagating state between units.
+using IDAES SequentialDecomposition for initialization order.
+
+IMPORTANT: Uses utils.topo_sort.compute_initialization_order which delegates
+to IDAES SequentialDecomposition. NO custom topological sort fallbacks.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+
+from utils.topo_sort import compute_initialization_order, SequentialDecompositionError
 
 
 class InitMethod(Enum):
@@ -56,77 +61,49 @@ class FlowsheetInitResult:
 class FlowsheetInitializer:
     """Sequential initialization for WaterTAP flowsheets.
 
+    Uses IDAES SequentialDecomposition for initialization order.
     Handles:
-    - Topological ordering of units
+    - Initialization order via SequentialDecomposition
     - State propagation between connections
     - Unit-specific initialization methods
     - DOF checking before/after
     """
 
-    def __init__(self, flowsheet: Any = None):
+    def __init__(self, flowsheet: Any = None, model: Any = None):
         """Initialize the flowsheet initializer.
 
         Args:
             flowsheet: The flowsheet block (m.fs)
+            model: The full model (for SequentialDecomposition)
         """
         self._flowsheet = flowsheet
+        self._model = model
 
     def get_initialization_order(
         self,
+        units: Dict[str, Any],
         connections: List[Dict],
-        tear_streams: Optional[List[str]] = None,
+        tear_streams: Optional[List[Tuple[str, str]]] = None,
     ) -> List[str]:
-        """Get topological order for initialization.
+        """Get initialization order using IDAES SequentialDecomposition.
 
         Args:
+            units: Dict of unit_id → unit block
             connections: List of connection dicts with source_unit, dest_unit
-            tear_streams: Optional list of streams to "tear" for recycles
+            tear_streams: Optional list of (src, dst) tuples to break cycles
 
         Returns:
             List of unit IDs in initialization order
+
+        Raises:
+            SequentialDecompositionError: If cycle detected without tear streams
         """
-        # Build adjacency graph
-        graph: Dict[str, List[str]] = {}
-        all_units = set()
-
-        for conn in connections:
-            src = conn.get("source_unit", "")
-            dst = conn.get("dest_unit", "")
-            all_units.add(src)
-            all_units.add(dst)
-
-            # Skip tear streams
-            stream_key = f"{src}.{conn.get('source_port', '')}"
-            if tear_streams and stream_key in tear_streams:
-                continue
-
-            if src not in graph:
-                graph[src] = []
-            graph[src].append(dst)
-
-        # Topological sort (Kahn's algorithm)
-        in_degree = {u: 0 for u in all_units}
-        for src, dests in graph.items():
-            for dst in dests:
-                in_degree[dst] = in_degree.get(dst, 0) + 1
-
-        queue = [u for u in all_units if in_degree.get(u, 0) == 0]
-        order = []
-
-        while queue:
-            u = queue.pop(0)
-            order.append(u)
-            for v in graph.get(u, []):
-                in_degree[v] -= 1
-                if in_degree[v] == 0:
-                    queue.append(v)
-
-        if len(order) != len(all_units):
-            # Cycle detected - add remaining units
-            remaining = [u for u in all_units if u not in order]
-            order.extend(remaining)
-
-        return order
+        return compute_initialization_order(
+            units=units,
+            connections=connections,
+            tear_streams=tear_streams,
+            model=self._model,
+        )
 
     def propagate_state(
         self,
@@ -247,9 +224,9 @@ class FlowsheetInitializer:
         connections: List[Dict],
         unit_methods: Optional[Dict[str, InitMethod]] = None,
         state_args: Optional[Dict[str, Dict]] = None,
-        tear_streams: Optional[List[str]] = None,
+        tear_streams: Optional[List[Tuple[str, str]]] = None,
     ) -> FlowsheetInitResult:
-        """Initialize entire flowsheet sequentially.
+        """Initialize entire flowsheet sequentially using IDAES SequentialDecomposition.
 
         Args:
             flowsheet: The flowsheet block
@@ -257,12 +234,15 @@ class FlowsheetInitializer:
             connections: List of connection dicts
             unit_methods: Optional dict of unit_id → InitMethod
             state_args: Optional dict of unit_id → state_args
-            tear_streams: Optional tear streams for recycles
+            tear_streams: Optional list of (src, dst) tuples for tear streams
 
         Returns:
             FlowsheetInitResult
+
+        Raises:
+            SequentialDecompositionError: If cycle detected without tear streams
         """
-        init_order = self.get_initialization_order(connections, tear_streams)
+        init_order = self.get_initialization_order(units, connections, tear_streams)
         results = []
 
         for unit_id in init_order:

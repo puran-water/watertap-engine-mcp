@@ -212,8 +212,35 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
 
         update_status(jobs_dir, job_id, progress=60, message="Initializing flowsheet...")
 
-        # Initialize units in order
-        for unit_id in units:
+        # Get initialization order using IDAES SequentialDecomposition
+        from utils.topo_sort import compute_initialization_order, SequentialDecompositionError
+
+        connections = [
+            {
+                "src_unit": conn.source_unit,
+                "src_port": conn.source_port,
+                "dest_unit": conn.dest_unit,
+                "dest_port": conn.dest_port,
+            }
+            for conn in session.connections
+        ]
+
+        try:
+            init_order = compute_initialization_order(
+                units={uid: units.get(uid) for uid in session.units.keys()},
+                connections=connections,
+                tear_streams=None,
+                model=m,
+            )
+        except SequentialDecompositionError as e:
+            update_status(jobs_dir, job_id, progress=65,
+                         message=f"Init order warning: {e}, using session order")
+            init_order = list(units.keys())
+
+        # Initialize units in SequentialDecomposition order
+        for unit_id in init_order:
+            if unit_id not in units:
+                continue
             unit_block = units[unit_id]
             try:
                 if hasattr(unit_block, 'initialize_build'):
@@ -320,10 +347,41 @@ def run_initialize(jobs_dir: Path, job_id: str, session_id: str, params: dict):
             )
             return
 
-        update_status(jobs_dir, job_id, progress=50, message="Initializing units...")
+        update_status(jobs_dir, job_id, progress=50, message="Computing initialization order...")
 
-        # Get initialization order from params or use session order
-        init_order = params.get("init_order", list(session.units.keys()))
+        # Get initialization order using IDAES SequentialDecomposition
+        from utils.topo_sort import compute_initialization_order, SequentialDecompositionError
+
+        connections = [
+            {
+                "src_unit": conn.source_unit,
+                "src_port": conn.source_port,
+                "dest_unit": conn.dest_unit,
+                "dest_port": conn.dest_port,
+            }
+            for conn in session.connections
+        ]
+
+        # Use params-provided order if given (for manual override), otherwise compute via SequentialDecomposition
+        if "init_order" in params:
+            init_order = params["init_order"]
+        else:
+            try:
+                init_order = compute_initialization_order(
+                    units={uid: units.get(uid) for uid in session.units.keys()},
+                    connections=connections,
+                    tear_streams=params.get("tear_streams"),
+                    model=m,
+                )
+            except SequentialDecompositionError as e:
+                update_status(
+                    jobs_dir, job_id,
+                    status=JobStatus.FAILED,
+                    error=f"Failed to compute initialization order: {e}",
+                )
+                return
+
+        update_status(jobs_dir, job_id, progress=55, message="Initializing units...")
         init_results = {}
 
         for i, unit_id in enumerate(init_order):

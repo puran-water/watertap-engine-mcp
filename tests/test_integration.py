@@ -1348,15 +1348,32 @@ class TestFailureRecoveryAndDiagnostics:
         # RO model should have constraints
         assert constraint_count > 0, f"Model should have constraints, got {constraint_count}"
 
-        # Get constraint residuals - value() with exception=False returns None for unevaluatable
+        # Get constraint residuals - test that at least some can be evaluated
+        # Note: Uninitialized models may have unevaluatable constraints, but
+        # the data structure iteration itself should work
         residuals = []
+        unevaluatable_count = 0
         for c in model.component_data_objects(Constraint, active=True, descend_into=True):
             body_val = value(c.body, exception=False)
             if body_val is not None:
                 residuals.append((str(c), body_val))
+            else:
+                unevaluatable_count += 1
 
-        # Should have some evaluatable constraints
+        # Verify we actually iterated over constraints
+        total_processed = len(residuals) + unevaluatable_count
+        assert total_processed == constraint_count, (
+            f"Should process all {constraint_count} constraints, got {total_processed}"
+        )
+
+        # Should have residuals list (may be empty if model is uninitialized)
         assert isinstance(residuals, list), "Residuals should be a list"
+
+        # If we have evaluatable constraints, verify residual structure
+        if residuals:
+            name, val = residuals[0]
+            assert isinstance(name, str), "Residual name should be string"
+            assert isinstance(val, (int, float)), "Residual value should be numeric"
 
     def test_bound_violations_detection(self):
         """Should be able to detect bound violations."""
@@ -1384,10 +1401,10 @@ class TestFailureRecoveryAndDiagnostics:
         # RO model should have variables
         assert var_count > 0, f"Model should have variables, got {var_count}"
 
-        # Check for bound violations
-        # value() with exception=False returns None for uninitialized
+        # Check for bound violations - iterate all variables
         violations = []
         vars_checked = 0
+        vars_unevaluatable = 0
         for v in model.component_data_objects(Var, active=True, descend_into=True):
             val = value(v, exception=False)
             if val is not None:
@@ -1398,9 +1415,24 @@ class TestFailureRecoveryAndDiagnostics:
                     violations.append((str(v), val, lb, "below_lower"))
                 if ub is not None and val > ub + 1e-8:
                     violations.append((str(v), val, ub, "above_upper"))
+            else:
+                vars_unevaluatable += 1
+
+        # Verify we actually iterated over variables
+        total_processed = vars_checked + vars_unevaluatable
+        assert total_processed == var_count, (
+            f"Should process all {var_count} variables, got {total_processed}"
+        )
 
         # Result should be a list (violations may or may not exist)
         assert isinstance(violations, list), "Violations should be a list"
+
+        # If we have violations, verify structure
+        if violations:
+            name, val, bound, vtype = violations[0]
+            assert isinstance(name, str), "Violation var name should be string"
+            assert isinstance(val, (int, float)), "Violation value should be numeric"
+            assert vtype in ("below_lower", "above_upper"), f"Invalid violation type: {vtype}"
 
     def test_sequential_decomposition_failure_handling(self):
         """Test that SequentialDecomposition failures are handled correctly."""

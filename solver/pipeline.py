@@ -94,7 +94,7 @@ class HygienePipeline:
         # Sub-components
         self._dof_resolver = DOFResolver(model)
         self._scaler = ScalingTools(model)
-        self._initializer = FlowsheetInitializer(model)
+        self._initializer = FlowsheetInitializer(flowsheet=model, model=model)
         self._diagnostics = DiagnosticsRunner(model)
 
     @property
