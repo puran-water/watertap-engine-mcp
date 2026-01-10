@@ -213,14 +213,23 @@ Always use the full module path from the registry, not the class name alone.
 
 ## Translators
 
-**Only ASM↔ADM translators exist in WaterTAP!**
+**Only ASM↔ADM translators exist in WaterTAP!** The registry includes 8 translators:
 
+**Core Translators (4):**
 | Source | Destination | Translator |
 |--------|-------------|------------|
 | ASM1 | ADM1 | Translator_ASM1_ADM1 |
 | ADM1 | ASM1 | Translator_ADM1_ASM1 |
 | ASM2D | ADM1 | Translator_ASM2d_ADM1 |
 | ADM1 | ASM2D | Translator_ADM1_ASM2d |
+
+**Modified Model Translators (4):**
+| Source | Destination | Translator |
+|--------|-------------|------------|
+| ModifiedASM2D | ADM1 | Translator_ModifiedASM2d_ADM1 |
+| ADM1 | ModifiedASM2D | Translator_ADM1_ModifiedASM2d |
+| ASM2D | ModifiedADM1 | Translator_ASM2d_ModifiedADM1 |
+| ModifiedADM1 | ASM2D | Translator_ModifiedADM1_ASM2d |
 
 For non-biological flowsheets, use the **same property package** throughout.
 

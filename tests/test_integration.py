@@ -426,11 +426,27 @@ class TestDOFIntegration:
                 ro.feed_side.properties[0, 0].temperature.fix(298.15)
 
         # Check DOF after fixing
-        dof = degrees_of_freedom(ro)
+        final_dof = degrees_of_freedom(ro)
 
-        # Verify we can detect over/under specification
-        # Note: actual DOF depends on unit model specifics, but we verify the check works
-        assert isinstance(dof, int), f"DOF must be integer, got {type(dof)}"
+        # Verify the DOF check returns an integer
+        assert isinstance(final_dof, int), f"DOF must be integer, got {type(final_dof)}"
+
+        # Verify DOF changed after fixing variables
+        assert final_dof < initial_dof, (
+            f"DOF should decrease after fixing variables: "
+            f"initial={initial_dof}, final={final_dof}"
+        )
+
+        # If we fixed enough vars to overspecify, DOF should be negative
+        # Note: RO0D typically has DOF ~5-6, so fixing 5+ vars may not always get to < 0
+        # but it should at least be lower than initial
+        if final_dof < 0:
+            # Successfully detected overspecification
+            pass  # Test passes
+        elif final_dof == 0:
+            # Exactly specified (ideal case)
+            pass  # Test passes
+        # If final_dof > 0, the above assertion already verified it decreased
 
 
 # ============================================================================
@@ -1247,8 +1263,11 @@ class TestAutoscaleLargeJac:
         # This is a real test - if it raises an unexpected error, the test should fail
         iscale.constraint_autoscale_large_jac(model)
 
-        # If we got here, autoscaling completed successfully
-        assert True, "Autoscaling completed without error"
+        # Verify autoscaling actually ran by checking model is still valid
+        # (if autoscaling corrupted the model, subsequent operations would fail)
+        from pyomo.environ import Var
+        var_count = sum(1 for _ in model.component_data_objects(Var, active=True, descend_into=True))
+        assert var_count > 0, "Model should still have variables after autoscaling"
 
     def test_scaling_before_and_after(self):
         """Autoscaling should not increase scaling issues."""

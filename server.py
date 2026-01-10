@@ -3112,7 +3112,7 @@ def connect_units(
             compat = check_connection_compatibility(source_pkg, dest_pkg)
 
             if compat["compatible"]:
-                if compat["translator_needed"]:
+                if compat["needs_translator"]:
                     # Translator is needed and exists
                     if auto_create_translator:
                         # Auto-create the translator and register it in session

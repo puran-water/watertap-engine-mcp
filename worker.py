@@ -62,12 +62,13 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
             m = builder.build()
             units = builder.get_units()
         except ModelBuildError as e:
-            # Fall back to empty model if WaterTAP not available
-            update_status(jobs_dir, job_id, progress=12,
-                         message=f"Model build failed ({e}), using empty model...")
-            m = ConcreteModel()
-            m.fs = FlowsheetBlock(dynamic=False)
-            units = {}
+            # FAIL LOUDLY - no silent fallback to empty model
+            update_status(
+                jobs_dir, job_id,
+                status=JobStatus.FAILED,
+                error=f"Model build failed: {e}. WaterTAP must be properly installed.",
+            )
+            return
 
         # Import and run hygiene pipeline
         from solver.pipeline import HygienePipeline, PipelineConfig, PipelineState
@@ -190,12 +191,13 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
             units = builder.get_units()
             update_status(jobs_dir, job_id, progress=35, message="Model built successfully")
         except ModelBuildError as e:
-            # Fall back to empty model if WaterTAP not fully available
-            update_status(jobs_dir, job_id, progress=25,
-                         message=f"Model build partial ({e}), continuing...")
-            m = ConcreteModel()
-            m.fs = FlowsheetBlock(dynamic=False)
-            units = {}
+            # FAIL LOUDLY - no silent fallback to empty model
+            update_status(
+                jobs_dir, job_id,
+                status=JobStatus.FAILED,
+                error=f"Model build failed: {e}. WaterTAP must be properly installed.",
+            )
+            return
 
         update_status(jobs_dir, job_id, progress=40, message="Checking DOF...")
 
@@ -233,9 +235,13 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
                 model=m,
             )
         except SequentialDecompositionError as e:
-            update_status(jobs_dir, job_id, progress=65,
-                         message=f"Init order warning: {e}, using session order")
-            init_order = list(units.keys())
+            # FAIL LOUDLY - SequentialDecomposition is required
+            update_status(
+                jobs_dir, job_id,
+                status=JobStatus.FAILED,
+                error=f"IDAES SequentialDecomposition failed: {e}. Check flowsheet structure.",
+            )
+            return
 
         # Initialize units in SequentialDecomposition order
         for unit_id in init_order:
