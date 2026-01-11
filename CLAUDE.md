@@ -48,7 +48,8 @@ watertap-engine-mcp/
 │   ├── nf_softening.py
 │   └── mvc_crystallizer.py
 ├── jobs/                       # Session/job persistence (runtime)
-└── tests/                      # 206 unit tests
+├── tests/                      # 297 tests (222 unit + 75 E2E)
+└── docs/plans/                 # Implementation plans
 ```
 
 ## Property Package Gotchas
@@ -158,3 +159,29 @@ pytest tests/ -v
 **Fail Loudly Policy:** If SequentialDecomposition is unavailable or fails, we return an error - we do NOT silently fall back to custom implementations.
 
 **Session Planning:** For order estimation before model build, a simple topological sort is used with clear messaging that this is planning only, not actual initialization.
+
+## Development Progress (2026-01-11)
+
+### Completed
+- **10 bugs fixed** during E2E testing (see BUGS.md for details)
+- **75 E2E tests** covering CLI commands, workflows, error paths, property packages
+- **Test suite hardened** with Codex audit recommendations:
+  - All MagicMock removed - tests use real WaterTAP models
+  - All silent exception swallowing removed - failures logged as warnings
+  - pytest warnings-as-errors enabled (filterwarnings = ["error"])
+  - All pytest.skip/skipif removed - tests FAIL LOUDLY if deps unavailable
+  - datetime.utcnow() deprecation fixed across codebase
+
+### Key Bug Fixes
+1. ZO database config auto-provided for Zero-Order property packages
+2. Tuple key serialization for JSON persistence
+3. SequentialDecomposition API corrected (create_graph + calculation_order)
+4. SequentialDecomposition uses heuristic tear selection (no cplex dependency)
+5. Windows/WSL stdout flush error handling in solver subprocess
+6. Job result JSON truncation fixed with proper flushing
+7. UndefinedData type handling for solve metrics
+
+### Documentation
+- `BUGS.md` - Bug tracking and test session notes
+- `docs/plans/implementation-plan.md` - Server architecture and design
+- `docs/plans/e2e-test-suite-plan.md` - E2E test suite design
