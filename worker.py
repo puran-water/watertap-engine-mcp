@@ -293,7 +293,13 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
 
 
 def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
-    """Execute a solve operation.
+    """Execute a solve operation (direct path).
+
+    This is the simpler solve path used by the solve() tool.
+    For full hygiene pipeline with diagnostics and recovery, use
+    run_full_pipeline() via the build_and_solve() tool.
+
+    Steps: DOF check -> scaling -> init -> IPOPT solve
 
     Args:
         jobs_dir: Jobs directory for status updates

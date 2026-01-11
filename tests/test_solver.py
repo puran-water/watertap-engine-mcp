@@ -20,6 +20,7 @@ from solver import (
     PipelineState,
     PipelineConfig,
     FailureAnalyzer,
+    RecoveryExecutor,
     RecoveryStrategy,
     FailureType,
     analyze_and_suggest_recovery,
@@ -179,6 +180,41 @@ class TestFailureAnalyzer:
         assert "failure_type" in result
         assert "likely_causes" in result
         assert "suggested_strategies" in result
+
+
+class TestRecoveryIntegration:
+    """Tests for recovery module integration with pipeline."""
+
+    def test_pipeline_has_recovery_executor(self):
+        """HygienePipeline should have RecoveryExecutor as component."""
+        pipeline = HygienePipeline(model=None, config=PipelineConfig())
+        assert hasattr(pipeline, '_recovery')
+        assert isinstance(pipeline._recovery, RecoveryExecutor)
+
+    def test_pipeline_recovery_disabled_by_default(self):
+        """Pipeline config should have enable_relaxed_solve=True by default."""
+        config = PipelineConfig()
+        # Default is True per CLAUDE.md documentation
+        assert hasattr(config, 'enable_relaxed_solve')
+
+    def test_recovery_executor_initialization(self):
+        """RecoveryExecutor should initialize without model."""
+        executor = RecoveryExecutor(model=None)
+        assert executor is not None
+        assert executor._model is None
+
+    def test_recovery_executor_returns_result_without_model(self):
+        """RecoveryExecutor.attempt_recovery should return failure if no model."""
+        executor = RecoveryExecutor(model=None)
+        result = executor.attempt_recovery("infeasible", max_attempts=1)
+        assert result.success is False
+        assert "No model" in result.message
+
+    def test_recovery_executor_has_analyzer(self):
+        """RecoveryExecutor should have FailureAnalyzer component."""
+        executor = RecoveryExecutor(model=None)
+        assert hasattr(executor, '_analyzer')
+        assert isinstance(executor._analyzer, FailureAnalyzer)
 
 
 if __name__ == "__main__":

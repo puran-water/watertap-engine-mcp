@@ -22,6 +22,7 @@ from .dof_resolver import DOFResolver, DOFStatus, FlowsheetDOFAnalysis
 from .scaler import ScalingTools
 from .initializer import FlowsheetInitializer
 from .diagnostics import DiagnosticsRunner
+from .recovery import RecoveryExecutor, analyze_and_suggest_recovery
 
 
 class PipelineState(Enum):
@@ -104,6 +105,7 @@ class HygienePipeline:
         self._scaler = ScalingTools(model)
         self._initializer = FlowsheetInitializer(flowsheet=model, model=model)
         self._diagnostics = DiagnosticsRunner(model)
+        self._recovery = RecoveryExecutor(model)
 
     def _discover_units(self) -> Dict[str, Any]:
         """Discover units under m.fs (IDAES convention), fallback to m.
@@ -518,8 +520,29 @@ class HygienePipeline:
                     self._config.enable_relaxed_solve
                     and result.state == PipelineState.SOLVING
                 ):
-                    # TODO: Implement relaxed solve in recovery.py
-                    pass
+                    # Attempt recovery using RecoveryExecutor
+                    recovery_result = self._recovery.attempt_recovery(
+                        termination_condition=result.details.get("termination_condition", "unknown"),
+                        max_attempts=3,
+                    )
+
+                    if recovery_result.success:
+                        self._transition(
+                            PipelineState.RELAXED_SOLVE,
+                            True,
+                            f"Recovery succeeded: {recovery_result.message}",
+                            details={
+                                "strategy": recovery_result.strategy.value,
+                                "actions_taken": recovery_result.actions_taken,
+                            },
+                        )
+                        # Continue to post-solve diagnostics after successful recovery
+                        return self.run_post_solve_diagnostics()
+                    else:
+                        # Recovery failed - include recovery details in failure
+                        result.details["recovery_attempted"] = True
+                        result.details["recovery_message"] = recovery_result.message
+                        result.details["recovery_actions"] = recovery_result.actions_taken
 
                 return self._transition(
                     PipelineState.FAILED,

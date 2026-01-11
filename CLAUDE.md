@@ -160,9 +160,61 @@ pytest tests/ -v
 
 **Session Planning:** For order estimation before model build, a simple topological sort is used with clear messaging that this is planning only, not actual initialization.
 
-## Development Progress (2026-01-11)
+## Solve Paths
 
-### Completed
+The server provides two solve approaches:
+
+1. **`solve()` tool** - Direct path (`worker.run_solve()`)
+   - DOF check (warns but continues)
+   - Calculate scaling factors
+   - Sequential initialization
+   - IPOPT solve
+   - Best for: Simple flowsheets, iterative development
+
+2. **`build_and_solve()` tool** - Full pipeline (`worker.run_full_pipeline()`)
+   - Uses HygienePipeline state machine
+   - Includes pre/post-solve diagnostics
+   - Supports recovery on failure (bound relaxation, scaling adjustment)
+   - Progress callbacks for each stage
+   - Best for: Complex flowsheets, production use
+
+Both paths persist results to the session for retrieval via `get_stream_results` and `get_unit_results`.
+
+## Development Progress
+
+### 2026-01-11 (Session 2): Code Review Feedback & Recovery Integration
+
+**Code Review Audit:**
+- Reviewed 10 code review claims against actual codebase
+- **8 of 10 claims were inaccurate** (code already correct)
+- **2 valid issues identified and fixed**
+- Independent verification by Codex confirmed findings
+
+**Recovery Module Integration:**
+- Integrated `RecoveryExecutor` into `HygienePipeline` failure handling
+- Pipeline now attempts automatic recovery on solve failure:
+  - Bound relaxation strategy
+  - Scaling adjustment strategy
+  - Up to 3 recovery attempts before failing
+- Location: `solver/pipeline.py` lines 523-545
+
+**Results Source Indication:**
+- Added `source` and `warning` fields to results fallback paths
+- `get_stream_results()` returns `"source": "unsolved_model"` with warning before solve
+- `get_unit_results()` returns same fields
+- Agents now know if values are from solved or unsolved models
+
+**New Tests:**
+- `tests/test_solver.py`: Added `TestRecoveryIntegration` class (5 tests)
+- `tests/e2e/test_results_source.py`: Results source indication tests (4 tests)
+
+**Documentation:**
+- `docs/plans/code-review-feedback-plan.md` - Feedback accuracy assessment and implementation plan
+- Added "Solve Paths" section to CLAUDE.md documenting two solve approaches
+
+### 2026-01-11 (Session 1): E2E Testing & Bug Fixes
+
+**Completed:**
 - **10 bugs fixed** during E2E testing (see BUGS.md for details)
 - **75 E2E tests** covering CLI commands, workflows, error paths, property packages
 - **Test suite hardened** with Codex audit recommendations:
@@ -172,7 +224,7 @@ pytest tests/ -v
   - All pytest.skip/skipif removed - tests FAIL LOUDLY if deps unavailable
   - datetime.utcnow() deprecation fixed across codebase
 
-### Key Bug Fixes
+**Key Bug Fixes:**
 1. ZO database config auto-provided for Zero-Order property packages
 2. Tuple key serialization for JSON persistence
 3. SequentialDecomposition API corrected (create_graph + calculation_order)
@@ -185,3 +237,4 @@ pytest tests/ -v
 - `BUGS.md` - Bug tracking and test session notes
 - `docs/plans/implementation-plan.md` - Server architecture and design
 - `docs/plans/e2e-test-suite-plan.md` - E2E test suite design
+- `docs/plans/code-review-feedback-plan.md` - Code review audit and fixes

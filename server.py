@@ -2747,6 +2747,8 @@ def get_stream_results(
 
     return {
         "session_id": session_id,
+        "source": "unsolved_model",
+        "warning": "Values are from an unsolved model. Run solve() first.",
         "streams": stream_data,
         "count": len(stream_data),
     }
@@ -2939,8 +2941,9 @@ def get_unit_results(
         "session_id": session_id,
         "unit_id": unit_id,
         "unit_type": unit_inst.unit_type,
+        "source": "unsolved_model",
+        "warning": "Values are from an unsolved model. Run solve() first.",
         "performance": performance,
-        "note": "Metrics extracted from built model",
     }
 
 
