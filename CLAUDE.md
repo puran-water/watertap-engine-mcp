@@ -21,18 +21,34 @@ The `watertap-flowsheet-builder` skill (in `~/skills/watertap-skill/`) provides 
 
 ```
 watertap-engine-mcp/
-├── server.py              # FastMCP server (27 tools)
+├── server.py              # FastMCP server (51 tools)
 ├── cli.py                 # Typer CLI adapter
 ├── worker.py              # Background job worker
 ├── core/
 │   ├── property_registry.py    # 13 property packages with module paths
-│   ├── translator_registry.py  # ASM/ADM translators only
-│   ├── unit_registry.py        # Unit specs with DOF, scaling, init
+│   ├── translator_registry.py  # 8 ASM/ADM translators
+│   ├── unit_registry.py        # 21+ unit specs with DOF, scaling, init
 │   ├── water_state.py          # Feed state abstraction
 │   └── session.py              # Session management
+├── solver/
+│   ├── pipeline.py             # Hygiene pipeline state machine
+│   ├── dof_resolver.py         # DOF analysis
+│   ├── scaler.py               # Scaling tools
+│   ├── initializer.py          # Sequential initialization (IDAES)
+│   ├── diagnostics.py          # DiagnosticsToolbox wrapper
+│   └── recovery.py             # Failure recovery
 ├── utils/
-│   └── job_manager.py     # Background job execution
-└── jobs/                  # Session/job persistence (runtime)
+│   ├── model_builder.py        # Session → Pyomo model
+│   ├── auto_translator.py      # Translator insertion
+│   ├── job_manager.py          # Background job execution
+│   ├── state_translator.py     # Feed state conversion
+│   └── topo_sort.py            # Initialization order (planning)
+├── templates/                  # Pre-built flowsheet templates
+│   ├── ro_train.py
+│   ├── nf_softening.py
+│   └── mvc_crystallizer.py
+├── jobs/                       # Session/job persistence (runtime)
+└── tests/                      # 206 unit tests
 ```
 
 ## Property Package Gotchas

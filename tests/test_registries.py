@@ -105,6 +105,24 @@ class TestPropertyRegistry:
             spec = get_property_package_spec(pkg_type)
             assert spec.requires_reaction_package is True
 
+    def test_zero_order_requires_database(self):
+        """ZERO_ORDER requires database configuration."""
+        spec = get_property_package_spec(PropertyPackageType.ZERO_ORDER)
+        assert spec.requires_config is True
+        assert spec.database_required is True
+        assert "database" in spec.config_fields
+
+    def test_mcas_config_fields_complete(self):
+        """MCAS config_fields should include all required parameters."""
+        spec = get_property_package_spec(PropertyPackageType.MCAS)
+        assert "solute_list" in spec.config_fields
+        assert "charge" in spec.config_fields
+        assert "mw_data" in spec.config_fields
+        # Also documented in config_kwargs
+        assert "solute_list" in spec.config_kwargs
+        assert "charge" in spec.config_kwargs
+        assert "mw_data" in spec.config_kwargs
+
 
 class TestTranslatorRegistry:
     """Tests for translator registry."""

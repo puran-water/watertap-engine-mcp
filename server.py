@@ -78,6 +78,7 @@ def create_session(
     name: str = "",
     description: str = "",
     property_package: str = "SEAWATER",
+    property_package_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Create a new WaterTAP flowsheet session.
 
@@ -86,6 +87,9 @@ def create_session(
         description: Optional session description
         property_package: Default property package (SEAWATER, NACL, NACL_T_DEP,
             WATER, MCAS, ZERO_ORDER, ASM1, ASM2D, ASM3, ADM1, etc.)
+        property_package_config: Configuration for property packages that require it:
+            - MCAS requires: {"solute_list": [...], "charge": {...}, "mw_data": {...}}
+            - ZERO_ORDER requires: {"database": "default", "water_source": "..."}
 
     Returns:
         Dict with session_id and configuration details
@@ -96,10 +100,21 @@ def create_session(
         valid = [p.name for p in PropertyPackageType]
         return {"error": f"Invalid property_package. Valid: {valid}"}
 
+    # Validate config for packages that require it
+    pkg_spec = PROPERTY_PACKAGES.get(pkg_type)
+    if pkg_spec and pkg_spec.requires_config:
+        if not property_package_config:
+            return {
+                "error": f"Property package {property_package} requires configuration",
+                "required_fields": pkg_spec.config_fields,
+                "config_help": pkg_spec.config_kwargs,
+            }
+
     config = SessionConfig(
         name=name,
         description=description,
         default_property_package=pkg_type,
+        property_package_config=property_package_config or {},
     )
     session = FlowsheetSession(config=config)
     session_manager.save(session)
@@ -108,6 +123,7 @@ def create_session(
         "session_id": session.config.session_id,
         "name": name,
         "property_package": property_package,
+        "property_package_config": property_package_config,
         "status": session.status.value,
         "created_at": session.config.created_at,
     }
@@ -1861,7 +1877,23 @@ def solve(
     solver_options: Optional[Dict[str, Any]] = None,
     background: bool = True,
 ) -> Dict[str, Any]:
-    """Solve the flowsheet.
+    """Solve the flowsheet with automatic preprocessing.
+
+    NOTE: This is NOT a pure solve operation. The solver workflow includes:
+    1. DOF check (warns if DOF != 0 but continues)
+    2. Calculate scaling factors (IDAES iscale.calculate_scaling_factors)
+    3. Sequential initialization (uses IDAES SequentialDecomposition order)
+    4. IPOPT solve
+
+    For explicit step-by-step control, use the individual tools:
+    - check_dof, fix_variable, unfix_variable
+    - calculate_scaling_factors, set_scaling_factor
+    - initialize_flowsheet, initialize_unit
+    - Then call solve
+
+    For the full hygiene pipeline with pre/post diagnostics, use build_and_solve.
+
+    Results are persisted to the session state after completion.
 
     Args:
         session_id: Session to solve
@@ -1870,8 +1902,8 @@ def solve(
         background: Run in background job (default: True)
 
     Returns:
-        If background=True: job_id for polling
-        If background=False: solve results directly
+        If background=True: job_id for polling with get_solve_status
+        If background=False: solve results directly (not recommended for MCP)
     """
     try:
         session = session_manager.load(session_id)

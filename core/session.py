@@ -56,6 +56,10 @@ class SessionConfig:
     default_property_package: PropertyPackageType = PropertyPackageType.SEAWATER
     property_packages: Dict[str, str] = field(default_factory=dict)
 
+    # Property package config kwargs (for MCAS, ZO, etc. that require config)
+    # Keys: solute_list, charge, mw_data (MCAS); database, water_source (ZO)
+    property_package_config: Dict[str, Any] = field(default_factory=dict)
+
     # Solver configuration
     solver: str = "ipopt"
     solver_options: Dict[str, Any] = field(default_factory=dict)

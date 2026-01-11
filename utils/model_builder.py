@@ -89,7 +89,12 @@ class ModelBuilder:
         self._flowsheet = self._model.fs
 
     def _create_property_packages(self):
-        """Create property packages needed by the flowsheet."""
+        """Create property packages needed by the flowsheet.
+
+        Handles:
+        - Default property package with optional config (MCAS, ZO need config)
+        - Additional packages required by translators (source/dest may differ)
+        """
         # Get default package
         default_pkg_type = self._session.config.default_property_package
         pkg_spec = PROPERTY_PACKAGES.get(default_pkg_type)
@@ -97,26 +102,134 @@ class ModelBuilder:
         if pkg_spec is None:
             raise ModelBuildError(f"Unknown property package: {default_pkg_type}")
 
+        # Get user-provided config for the package
+        pkg_config = self._session.config.property_package_config or {}
+
+        # Validate required config
+        if pkg_spec.requires_config:
+            missing = [f for f in pkg_spec.config_fields if f not in pkg_config]
+            if missing and pkg_spec.database_required:
+                raise ModelBuildError(
+                    f"Property package {default_pkg_type.name} requires config: {missing}. "
+                    f"Required fields: {pkg_spec.config_fields}"
+                )
+            # Note: For MCAS, missing config is an error; for ZO, we try default database
+
         # Import and create the property package
         try:
             module = importlib.import_module(pkg_spec.module_path)
             PkgClass = getattr(module, pkg_spec.class_name)
 
+            # Build config kwargs for package instantiation
+            config_kwargs = self._build_package_config(pkg_spec, pkg_config)
+
             # Create property package on flowsheet
-            # Note: Configuration depends on package type
-            if default_pkg_type == PropertyPackageType.ZERO_ORDER:
-                # Zero-order needs database configuration
-                setattr(self._flowsheet, "prop_params", PkgClass())
+            if config_kwargs:
+                setattr(self._flowsheet, "prop_params", PkgClass(**config_kwargs))
             else:
-                # Standard property packages
                 setattr(self._flowsheet, "prop_params", PkgClass())
 
             self._property_packages["default"] = getattr(self._flowsheet, "prop_params")
+            self._property_packages[default_pkg_type.value] = self._property_packages["default"]
 
         except ImportError as e:
             raise ModelBuildError(f"Cannot import property package {pkg_spec.module_path}: {e}")
         except Exception as e:
             raise ModelBuildError(f"Cannot create property package {default_pkg_type}: {e}")
+
+        # Create additional packages needed by translators
+        self._create_translator_packages()
+
+    def _build_package_config(self, pkg_spec: 'PropertyPackageSpec', user_config: Dict) -> Dict:
+        """Build configuration kwargs for property package instantiation.
+
+        Args:
+            pkg_spec: Property package specification
+            user_config: User-provided configuration
+
+        Returns:
+            Config kwargs dict for package constructor
+        """
+        config = {}
+
+        if pkg_spec.pkg_type == PropertyPackageType.MCAS:
+            # MCAS requires explicit solute config
+            if "solute_list" in user_config:
+                config["solute_list"] = user_config["solute_list"]
+            if "charge" in user_config:
+                config["charge"] = user_config["charge"]
+            if "mw_data" in user_config:
+                config["mw_data"] = user_config["mw_data"]
+
+        elif pkg_spec.pkg_type == PropertyPackageType.ZERO_ORDER:
+            # Zero-order requires database
+            if "database" in user_config:
+                config["database"] = user_config["database"]
+            elif pkg_spec.database_required:
+                # Try to create default database
+                try:
+                    from watertap.core.wt_database import Database
+                    config["database"] = Database()
+                except ImportError:
+                    pass  # Will fail later with clearer error
+
+            if "water_source" in user_config:
+                config["water_source"] = user_config["water_source"]
+            if "solute_list" in user_config:
+                config["solute_list"] = user_config["solute_list"]
+
+        return config
+
+    def _create_translator_packages(self):
+        """Create property packages required by translators.
+
+        Translators (ASM↔ADM) need different packages for inlet and outlet.
+        This creates those packages if they differ from the default.
+        """
+        for trans_id, trans_data in self._session.translators.items():
+            source_pkg_type = trans_data.get("source_pkg")
+            dest_pkg_type = trans_data.get("dest_pkg")
+
+            if source_pkg_type is None or dest_pkg_type is None:
+                continue
+
+            # Convert string to enum if needed
+            if isinstance(source_pkg_type, str):
+                source_pkg_type = PropertyPackageType(source_pkg_type)
+            if isinstance(dest_pkg_type, str):
+                dest_pkg_type = PropertyPackageType(dest_pkg_type)
+
+            # Create source package if not already created
+            if source_pkg_type.value not in self._property_packages:
+                self._create_additional_package(source_pkg_type, f"prop_{source_pkg_type.name.lower()}")
+
+            # Create dest package if not already created
+            if dest_pkg_type.value not in self._property_packages:
+                self._create_additional_package(dest_pkg_type, f"prop_{dest_pkg_type.name.lower()}")
+
+    def _create_additional_package(self, pkg_type: PropertyPackageType, attr_name: str):
+        """Create an additional property package on the flowsheet.
+
+        Args:
+            pkg_type: Property package type to create
+            attr_name: Attribute name to use on flowsheet
+        """
+        pkg_spec = PROPERTY_PACKAGES.get(pkg_type)
+        if pkg_spec is None:
+            raise ModelBuildError(f"Unknown property package: {pkg_type}")
+
+        try:
+            module = importlib.import_module(pkg_spec.module_path)
+            PkgClass = getattr(module, pkg_spec.class_name)
+
+            # Create without extra config (biological packages don't need user config)
+            setattr(self._flowsheet, attr_name, PkgClass())
+            self._property_packages[pkg_type.value] = getattr(self._flowsheet, attr_name)
+
+        except ImportError as e:
+            raise ModelBuildError(f"Cannot import property package {pkg_spec.module_path}: {e}")
+        except Exception as e:
+            raise ModelBuildError(f"Cannot create property package {pkg_type}: {e}")
 
     def _create_units(self):
         """Create all units from session."""
@@ -187,27 +300,30 @@ class ModelBuilder:
     def _create_translator(self, trans_id: str, trans_data: Dict):
         """Create a single translator block.
 
+        Translators (ASM↔ADM) convert state variables between property packages.
+        Each translator needs the correct inlet and outlet property packages.
+
         Args:
             trans_id: Translator identifier
             trans_data: Translator configuration from session
         """
-        source_pkg = trans_data.get("source_pkg")
-        dest_pkg = trans_data.get("dest_pkg")
+        source_pkg_type = trans_data.get("source_pkg")
+        dest_pkg_type = trans_data.get("dest_pkg")
 
-        if source_pkg is None or dest_pkg is None:
+        if source_pkg_type is None or dest_pkg_type is None:
             raise ModelBuildError(f"Translator {trans_id} missing source_pkg or dest_pkg")
 
         # Convert string to enum if needed
-        if isinstance(source_pkg, str):
-            source_pkg = PropertyPackageType(source_pkg)
-        if isinstance(dest_pkg, str):
-            dest_pkg = PropertyPackageType(dest_pkg)
+        if isinstance(source_pkg_type, str):
+            source_pkg_type = PropertyPackageType(source_pkg_type)
+        if isinstance(dest_pkg_type, str):
+            dest_pkg_type = PropertyPackageType(dest_pkg_type)
 
         # Get translator spec from registry
-        spec = get_translator(source_pkg, dest_pkg)
+        spec = get_translator(source_pkg_type, dest_pkg_type)
         if spec is None:
             raise ModelBuildError(
-                f"No translator found for {source_pkg.value} → {dest_pkg.value}"
+                f"No translator found for {source_pkg_type.value} → {dest_pkg_type.value}"
             )
 
         try:
@@ -215,13 +331,26 @@ class ModelBuilder:
             module = importlib.import_module(spec.module_path)
             TranslatorClass = getattr(module, spec.class_name)
 
-            # Build translator config
-            # Note: Translators require property package instances
+            # Build translator config with CORRECT inlet/outlet packages
+            # Note: Translators MUST have different packages for inlet/outlet
             config = {}
-            default_pkg = self._property_packages.get("default")
-            if default_pkg is not None:
-                config["inlet_property_package"] = default_pkg
-                config["outlet_property_package"] = default_pkg
+
+            # Get inlet property package (source package type)
+            inlet_pkg = self._property_packages.get(source_pkg_type.value)
+            if inlet_pkg is None:
+                raise ModelBuildError(
+                    f"Inlet property package {source_pkg_type.value} not created for translator {trans_id}"
+                )
+
+            # Get outlet property package (dest package type)
+            outlet_pkg = self._property_packages.get(dest_pkg_type.value)
+            if outlet_pkg is None:
+                raise ModelBuildError(
+                    f"Outlet property package {dest_pkg_type.value} not created for translator {trans_id}"
+                )
+
+            config["inlet_property_package"] = inlet_pkg
+            config["outlet_property_package"] = outlet_pkg
 
             # Add any user-provided config
             if "config" in trans_data:

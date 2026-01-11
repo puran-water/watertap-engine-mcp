@@ -32,6 +32,34 @@ def update_status(jobs_dir: Path, job_id: str, **kwargs):
     update_job_from_worker(jobs_dir, job_id, **kwargs)
 
 
+def persist_results_to_session(jobs_dir: Path, session_id: str, result: dict, success: bool, message: str = ""):
+    """Persist job results to the session state.
+
+    Args:
+        jobs_dir: Jobs directory (used to locate flowsheets dir)
+        session_id: Session to update
+        result: Result dict from job
+        success: Whether solve was successful
+        message: Optional failure message
+    """
+    try:
+        from core.session import SessionManager
+        session_manager = SessionManager(jobs_dir.parent / "flowsheets")
+        session = session_manager.load(session_id)
+
+        if success:
+            session.set_solved(result)
+        else:
+            session.set_failed(message or "Solve failed")
+            session.results = result  # Store partial results even on failure
+
+        session_manager.save(session)
+    except Exception as e:
+        # Don't fail the job if session persistence fails
+        # The job result is still saved by update_status
+        print(f"Warning: Failed to persist results to session: {e}", file=sys.stderr)
+
+
 def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict):
     """Execute full hygiene pipeline (DOF check → scaling → init → solve).
 
@@ -106,37 +134,43 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
         result = pipeline.run_full_pipeline(on_stage_complete=on_stage_complete)
 
         if result.success:
+            result_dict = {
+                "state": result.state.value,
+                "details": result.details,
+                "history": [
+                    {"state": h.state.value, "success": h.success, "message": h.message}
+                    for h in pipeline.history
+                ],
+            }
             update_status(
                 jobs_dir, job_id,
                 status=JobStatus.COMPLETED,
                 progress=100,
                 message="Pipeline completed successfully",
-                result={
-                    "state": result.state.value,
-                    "details": result.details,
-                    "history": [
-                        {"state": h.state.value, "success": h.success, "message": h.message}
-                        for h in pipeline.history
-                    ],
-                },
+                result=result_dict,
             )
+            # Persist results to session
+            persist_results_to_session(jobs_dir, session_id, result_dict, success=True)
         else:
+            result_dict = {
+                "state": result.state.value,
+                "details": result.details,
+                "errors": result.errors,
+                "history": [
+                    {"state": h.state.value, "success": h.success, "message": h.message}
+                    for h in pipeline.history
+                ],
+            }
             update_status(
                 jobs_dir, job_id,
                 status=JobStatus.FAILED,
                 progress=100,
                 message=f"Pipeline failed: {result.message}",
                 error=result.message,
-                result={
-                    "state": result.state.value,
-                    "details": result.details,
-                    "errors": result.errors,
-                    "history": [
-                        {"state": h.state.value, "success": h.success, "message": h.message}
-                        for h in pipeline.history
-                    ],
-                },
+                result=result_dict,
             )
+            # Persist results to session (even on failure)
+            persist_results_to_session(jobs_dir, session_id, result_dict, success=False, message=result.message)
 
     except ImportError as e:
         update_status(
@@ -289,6 +323,8 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
                 message="Solve completed successfully",
                 result=result,
             )
+            # Persist results to session
+            persist_results_to_session(jobs_dir, session_id, result, success=True)
         else:
             update_status(
                 jobs_dir, job_id,
@@ -298,6 +334,8 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
                 error=f"Termination condition: {termination}",
                 result=result,
             )
+            # Persist results to session (even on failure)
+            persist_results_to_session(jobs_dir, session_id, result, success=False, message=f"Termination: {termination}")
 
     except ImportError as e:
         update_status(

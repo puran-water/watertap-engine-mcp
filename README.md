@@ -322,7 +322,7 @@ Then use natural language with the companion skill:
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/watertap-engine-mcp.git
+git clone https://github.com/puran-water/watertap-engine-mcp.git
 cd watertap-engine-mcp
 
 # Create virtual environment
@@ -348,7 +348,7 @@ pip install watertap idaes-pse pyomo
 
 ```
 watertap-engine-mcp/
-├── server.py              # MCP Adapter (FastMCP) - 27 tools
+├── server.py              # MCP Adapter (FastMCP) - 51 tools
 ├── cli.py                 # CLI Adapter (typer)
 ├── worker.py              # Background job worker
 ├── core/
@@ -375,7 +375,7 @@ watertap-engine-mcp/
 │   ├── nf_softening.py
 │   └── mvc_crystallizer.py
 ├── jobs/                       # Session/job persistence (runtime)
-└── tests/                      # 144 unit tests
+└── tests/                      # 206 unit tests
 ```
 
 ## Companion Skill
@@ -393,7 +393,7 @@ The skill orchestrates the atomic server tools - server provides explicit operat
 ## Testing
 
 ```bash
-# Run all tests (144)
+# Run all tests (206)
 pytest tests/ -v
 
 # Skip slow tests
