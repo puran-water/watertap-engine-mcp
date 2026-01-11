@@ -60,6 +60,103 @@ def persist_results_to_session(jobs_dir: Path, session_id: str, result: dict, su
         print(f"Warning: Failed to persist results to session: {e}", file=sys.stderr)
 
 
+def _extract_solved_kpis(model, units: dict) -> dict:
+    """Extract key performance indicators from solved model.
+
+    Args:
+        model: Solved Pyomo model
+        units: Dict of unit_id -> unit_block
+
+    Returns:
+        JSON-serializable dict with streams and unit KPIs
+    """
+    from pyomo.environ import value
+
+    kpis = {
+        "streams": {},
+        "units": {},
+    }
+
+    # Common port names in WaterTAP
+    port_names = [
+        'inlet', 'outlet', 'permeate', 'retentate', 'feed', 'product', 'brine',
+        'feed_inlet', 'feed_outlet', 'product_outlet', 'waste_outlet',
+    ]
+
+    # Common state variable names
+    state_vars = [
+        'flow_mass_phase_comp', 'flow_mol_phase_comp', 'flow_vol',
+        'temperature', 'pressure', 'conc_mass_phase_comp', 'conc_mol_phase_comp',
+        'mass_frac_phase_comp', 'mole_frac_phase_comp',
+    ]
+
+    # Common unit KPI names
+    unit_kpi_names = [
+        'recovery_frac_mass_H2O', 'recovery_vol_phase', 'specific_energy_consumption',
+        'area', 'flux_mass_io_phase_comp', 'dens_mass_phase', 'work_mechanical',
+        'deltaP', 'efficiency_pump', 'recovery_frac',
+    ]
+
+    for unit_id, unit_block in units.items():
+        unit_streams = {}
+
+        # Extract stream data from ports
+        for port_name in port_names:
+            port = getattr(unit_block, port_name, None)
+            if port is None:
+                continue
+
+            stream_data = {}
+            for var_name in state_vars:
+                var = getattr(port, var_name, None)
+                if var is not None:
+                    try:
+                        if hasattr(var, '__iter__') and not isinstance(var, str):
+                            # Indexed variable
+                            stream_data[var_name] = {
+                                str(idx): float(value(var[idx])) if value(var[idx]) is not None else None
+                                for idx in var
+                            }
+                        else:
+                            # Scalar variable
+                            val = value(var)
+                            stream_data[var_name] = float(val) if val is not None else None
+                    except Exception as e:
+                        # Log extraction failure instead of silent pass
+                        print(f"Warning: Failed to extract {var_name} from {unit_id}.{port_name}: {e}", file=sys.stderr)
+
+            if stream_data:
+                unit_streams[port_name] = stream_data
+
+        if unit_streams:
+            kpis["streams"][unit_id] = unit_streams
+
+        # Extract unit-level KPIs
+        unit_kpis = {}
+        for kpi_name in unit_kpi_names:
+            kpi_var = getattr(unit_block, kpi_name, None)
+            if kpi_var is not None:
+                try:
+                    if hasattr(kpi_var, '__iter__') and not isinstance(kpi_var, str):
+                        # Indexed variable
+                        unit_kpis[kpi_name] = {
+                            str(idx): float(value(kpi_var[idx])) if value(kpi_var[idx]) is not None else None
+                            for idx in kpi_var
+                        }
+                    else:
+                        # Scalar variable
+                        val = value(kpi_var)
+                        unit_kpis[kpi_name] = float(val) if val is not None else None
+                except Exception as e:
+                    # Log extraction failure instead of silent pass
+                    print(f"Warning: Failed to extract KPI {kpi_name} from {unit_id}: {e}", file=sys.stderr)
+
+        if unit_kpis:
+            kpis["units"][unit_id] = unit_kpis
+
+    return kpis
+
+
 def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict):
     """Execute full hygiene pipeline (DOF check → scaling → init → solve).
 
@@ -109,7 +206,7 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
             enable_relaxed_solve=params.get("enable_relaxed_solve", True),
         )
 
-        pipeline = HygienePipeline(m, config)
+        pipeline = HygienePipeline(m, config, units=units)
 
         def on_stage_complete(result):
             """Update job progress after each pipeline stage."""
@@ -142,6 +239,15 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
                     for h in pipeline.history
                 ],
             }
+
+            # Extract KPIs from solved model for persistence
+            try:
+                kpis = _extract_solved_kpis(m, units)
+                result_dict["kpis"] = kpis
+            except Exception as e:
+                print(f"Warning: Failed to extract KPIs: {e}", file=sys.stderr)
+                result_dict["kpis"] = {}
+
             update_status(
                 jobs_dir, job_id,
                 status=JobStatus.COMPLETED,
@@ -149,7 +255,7 @@ def run_full_pipeline(jobs_dir: Path, job_id: str, session_id: str, params: dict
                 message="Pipeline completed successfully",
                 result=result_dict,
             )
-            # Persist results to session
+            # Persist results to session (includes KPIs)
             persist_results_to_session(jobs_dir, session_id, result_dict, success=True)
         else:
             result_dict = {
@@ -300,7 +406,20 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
             solver.options[opt] = val
 
         # Solve the model
-        results = solver.solve(m, tee=False)
+        # Redirect stdout/stderr to avoid Windows/WSL flush issues
+        import io
+        import os
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            # Use devnull to suppress any solver output and avoid flush issues
+            with open(os.devnull, 'w') as devnull:
+                sys.stdout = devnull
+                sys.stderr = devnull
+                results = solver.solve(m, tee=False)
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
         update_status(jobs_dir, job_id, progress=90, message="Extracting results...")
 
@@ -308,14 +427,43 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
         solve_status = str(results.solver.status)
         termination = str(results.solver.termination_condition)
 
+        # Extract and ensure values are JSON-serializable
+        solve_time_raw = getattr(results.solver, "wallclock_time", None)
+        iterations_raw = getattr(results.solver, "iterations", None)
+
+        # Handle UndefinedData and other non-numeric types
+        def safe_float(val):
+            if val is None:
+                return None
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+
+        def safe_int(val):
+            if val is None:
+                return None
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                return None
+
         result = {
             "solver_status": solve_status,
             "termination_condition": termination,
-            "solve_time": getattr(results.solver, "wallclock_time", None),
-            "iterations": getattr(results.solver, "iterations", None),
+            "solve_time": safe_float(solve_time_raw),
+            "iterations": safe_int(iterations_raw),
         }
 
         if termination == "optimal":
+            # Extract KPIs from solved model for persistence
+            try:
+                kpis = _extract_solved_kpis(m, units)
+                result["kpis"] = kpis
+            except Exception as e:
+                print(f"Warning: Failed to extract KPIs: {e}", file=sys.stderr)
+                result["kpis"] = {}
+
             update_status(
                 jobs_dir, job_id,
                 status=JobStatus.COMPLETED,
@@ -323,7 +471,7 @@ def run_solve(jobs_dir: Path, job_id: str, session_id: str, params: dict):
                 message="Solve completed successfully",
                 result=result,
             )
-            # Persist results to session
+            # Persist results to session (includes KPIs)
             persist_results_to_session(jobs_dir, session_id, result, success=True)
         else:
             update_status(

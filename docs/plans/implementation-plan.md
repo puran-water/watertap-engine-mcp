@@ -101,7 +101,6 @@ watertap-engine-mcp/
 │
 ├── utils/
 │   ├── __init__.py
-│   ├── flowsheet_session.py       # Session persistence
 │   ├── job_manager.py             # Background job execution
 │   ├── auto_translator.py         # Translator auto-insertion
 │   ├── state_translator.py        # Feed state → property pkg

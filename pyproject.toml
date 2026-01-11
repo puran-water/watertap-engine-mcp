@@ -67,3 +67,23 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "unit: fast isolated tests (no WaterTAP required)",
+    "component: tests for individual components",
+    "integration: tests requiring full WaterTAP/IDAES stack",
+    "solver: tests that execute actual solver.solve()",
+    "initialization: tests for initialization routines",
+    "slow: tests that take >10 seconds",
+]
+# FAIL LOUDLY: Treat warnings as errors (except third-party library deprecations)
+filterwarnings = [
+    "error",
+    # Ignore third-party library warnings we can't control
+    "ignore::DeprecationWarning:idaes.*",
+    "ignore::DeprecationWarning:pyomo.*",
+    "ignore::DeprecationWarning:watertap.*",
+    "ignore::PendingDeprecationWarning",
+    # Ignore resource warnings from subprocess cleanup in tests
+    "ignore::ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]

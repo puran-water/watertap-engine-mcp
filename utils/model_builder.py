@@ -63,6 +63,9 @@ class ModelBuilder:
             # Create connections (Arcs)
             self._create_connections()
 
+            # Expand arcs for Pyomo network (required before solve)
+            self._expand_arcs()
+
             # Apply feed state
             self._apply_feed_state()
 
@@ -105,15 +108,8 @@ class ModelBuilder:
         # Get user-provided config for the package
         pkg_config = self._session.config.property_package_config or {}
 
-        # Validate required config
-        if pkg_spec.requires_config:
-            missing = [f for f in pkg_spec.config_fields if f not in pkg_config]
-            if missing and pkg_spec.database_required:
-                raise ModelBuildError(
-                    f"Property package {default_pkg_type.name} requires config: {missing}. "
-                    f"Required fields: {pkg_spec.config_fields}"
-                )
-            # Note: For MCAS, missing config is an error; for ZO, we try default database
+        # Note: Validation happens AFTER _build_package_config which provides defaults
+        # ZO can auto-create a default Database; MCAS requires explicit user config
 
         # Import and create the property package
         try:
@@ -122,6 +118,15 @@ class ModelBuilder:
 
             # Build config kwargs for package instantiation
             config_kwargs = self._build_package_config(pkg_spec, pkg_config)
+
+            # Validate that required config is present (after defaults applied)
+            if pkg_spec.requires_config and pkg_spec.pkg_type == PropertyPackageType.MCAS:
+                # MCAS requires explicit solute_list - no auto-default
+                if "solute_list" not in config_kwargs:
+                    raise ModelBuildError(
+                        f"MCAS property package requires 'solute_list' in config. "
+                        f"Set property_package_config with solute definitions."
+                    )
 
             # Create property package on flowsheet
             if config_kwargs:
@@ -382,7 +387,7 @@ class ModelBuilder:
             self._create_connection(conn, Arc)
 
     def _create_connection(self, conn: Connection, ArcClass):
-        """Create a single Arc connection.
+        """Create Arc(s) for a connection, routing through translator if specified.
 
         Args:
             conn: Connection definition
@@ -409,10 +414,44 @@ class ModelBuilder:
                 f"Destination port {conn.dest_port} not found on {conn.dest_unit}"
             )
 
-        # Create Arc
-        arc_name = f"arc_{conn.source_unit}_{conn.dest_unit}"
-        arc = ArcClass(source=src_port, destination=dst_port)
-        setattr(self._flowsheet, arc_name, arc)
+        # Check if translator is needed
+        if conn.translator_id and conn.translator_id in self._translators:
+            translator = self._translators[conn.translator_id]
+            trans_inlet = getattr(translator, 'inlet', None)
+            trans_outlet = getattr(translator, 'outlet', None)
+
+            if trans_inlet is None or trans_outlet is None:
+                raise ModelBuildError(
+                    f"Translator {conn.translator_id} missing inlet/outlet ports"
+                )
+
+            # Create two arcs: source -> translator -> dest
+            arc1_name = f"arc_{conn.source_unit}_to_{conn.translator_id}"
+            arc1 = ArcClass(source=src_port, destination=trans_inlet)
+            setattr(self._flowsheet, arc1_name, arc1)
+
+            arc2_name = f"arc_{conn.translator_id}_to_{conn.dest_unit}"
+            arc2 = ArcClass(source=trans_outlet, destination=dst_port)
+            setattr(self._flowsheet, arc2_name, arc2)
+        else:
+            # Direct connection (no translator)
+            arc_name = f"arc_{conn.source_unit}_{conn.dest_unit}"
+            arc = ArcClass(source=src_port, destination=dst_port)
+            setattr(self._flowsheet, arc_name, arc)
+
+    def _expand_arcs(self):
+        """Expand arcs for Pyomo network.
+
+        Arcs must be expanded before solving or initialization.
+        This transforms Arc constraints into explicit equality constraints.
+        """
+        try:
+            from pyomo.environ import TransformationFactory
+            TransformationFactory('network.expand_arcs').apply_to(self._model)
+        except Exception as e:
+            # Non-fatal if no arcs to expand
+            import sys
+            print(f"Note: Arc expansion: {e}", file=sys.stderr)
 
     def _apply_feed_state(self):
         """Apply feed state from session to Feed units.
@@ -448,9 +487,10 @@ class ModelBuilder:
                                             var[idx].fix(val)
                                 elif hasattr(var, 'fix'):
                                     var.fix(value)
-                except Exception:
-                    # Skip if can't apply - may need unit-specific handling
-                    pass
+                except Exception as e:
+                    # Log warning instead of silent skip
+                    import sys
+                    print(f"Warning: Cannot apply feed state to {unit_id}: {e}", file=sys.stderr)
 
     def _apply_fixed_variables(self):
         """Apply fixed variables from session to model."""
@@ -512,9 +552,10 @@ class ModelBuilder:
                         for v in var.values():
                             v.fix(value)
 
-        except Exception:
-            # Skip variables that can't be fixed
-            pass
+        except Exception as e:
+            # Log warning instead of silent skip
+            import sys
+            print(f"Warning: Cannot fix variable {var_path}: {e}", file=sys.stderr)
 
     def _apply_scaling_factors(self):
         """Apply scaling factors from session to model."""
@@ -571,8 +612,10 @@ class ModelBuilder:
                 if var is not None:
                     iscale.set_scaling_factor(var, factor)
 
-        except Exception:
-            pass
+        except Exception as e:
+            # Log warning instead of silent skip
+            import sys
+            print(f"Warning: Cannot set scaling for {var_path}: {e}", file=sys.stderr)
 
     def get_units(self) -> Dict[str, Any]:
         """Get the created unit blocks.

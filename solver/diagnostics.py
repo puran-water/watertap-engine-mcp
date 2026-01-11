@@ -101,15 +101,16 @@ class DiagnosticsRunner:
             # Check for structural singularities
             try:
                 sing_result = toolbox.report_structural_issues()
-                # Parse output - this is text-based
-                issues.append(str(sing_result) if sing_result else "No structural issues")
+                # Only append if there are actual issues
+                if sing_result:
+                    issues.append(str(sing_result))
             except Exception as e:
                 issues.append(f"Structural check error: {e}")
 
             return DiagnosticResult(
                 diagnostic_type=DiagnosticType.STRUCTURAL,
-                issues_found=len(issues) if issues else 0,
-                details=issues,
+                issues_found=len(issues),  # Now correctly 0 when no issues
+                details=issues if issues else ["No structural issues found"],
                 summary="Structural diagnostics complete",
             )
 
@@ -147,14 +148,16 @@ class DiagnosticsRunner:
 
             try:
                 num_result = toolbox.report_numerical_issues()
-                issues.append(str(num_result) if num_result else "No numerical issues")
+                # Only append if there are actual issues
+                if num_result:
+                    issues.append(str(num_result))
             except Exception as e:
                 issues.append(f"Numerical check error: {e}")
 
             return DiagnosticResult(
                 diagnostic_type=DiagnosticType.NUMERICAL,
-                issues_found=len(issues) if issues else 0,
-                details=issues,
+                issues_found=len(issues),  # Now correctly 0 when no issues
+                details=issues if issues else ["No numerical issues found"],
                 summary="Numerical diagnostics complete",
             )
 

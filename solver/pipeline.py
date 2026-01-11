@@ -79,23 +79,66 @@ class PipelineConfig:
 class HygienePipeline:
     """Solver hygiene pipeline for systematic flowsheet solving."""
 
-    def __init__(self, model: Any = None, config: Optional[PipelineConfig] = None):
+    def __init__(
+        self,
+        model: Any = None,
+        config: Optional[PipelineConfig] = None,
+        units: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize pipeline.
 
         Args:
             model: Pyomo model
             config: Pipeline configuration
+            units: Optional dict of unit_id -> unit_block. If not provided,
+                   units are discovered from model.fs (IDAES convention).
         """
         self._model = model
         self._config = config or PipelineConfig()
         self._state = PipelineState.IDLE
         self._history: List[PipelineResult] = []
+        self._units = units  # Can be None, will be discovered on demand
 
         # Sub-components
         self._dof_resolver = DOFResolver(model)
         self._scaler = ScalingTools(model)
         self._initializer = FlowsheetInitializer(flowsheet=model, model=model)
         self._diagnostics = DiagnosticsRunner(model)
+
+    def _discover_units(self) -> Dict[str, Any]:
+        """Discover units under m.fs (IDAES convention), fallback to m.
+
+        Returns:
+            Dict mapping unit_id to unit block
+        """
+        if self._model is None:
+            return {}
+
+        from pyomo.core.base.block import Block
+
+        # Prefer m.fs (IDAES FlowsheetBlock pattern)
+        fs = getattr(self._model, 'fs', self._model)
+
+        units = {}
+        for name in dir(fs):
+            if name.startswith('_'):
+                continue
+            obj = getattr(fs, name, None)
+            if obj is None:
+                continue
+            # Type check + port presence (avoid picking up non-units)
+            if isinstance(obj, Block) and (
+                hasattr(obj, 'inlet') or hasattr(obj, 'outlet') or
+                hasattr(obj, 'initialize')
+            ):
+                units[name] = obj
+        return units
+
+    def get_units(self) -> Dict[str, Any]:
+        """Get units dict, discovering if not already set."""
+        if self._units is None:
+            self._units = self._discover_units()
+        return self._units
 
     @property
     def state(self) -> PipelineState:
@@ -237,29 +280,25 @@ class HygienePipeline:
             )
 
         try:
-            # Build units dict and connections from model
-            units = {}
-            connections = []
-            for name in dir(self._model):
-                if name.startswith('_'):
-                    continue
-                obj = getattr(self._model, name)
-                if hasattr(obj, 'inlet') or hasattr(obj, 'outlet'):
-                    units[name] = obj
+            # Use units from constructor or discover from m.fs
+            units = self.get_units()
 
             # Get connections from arcs if available
-            if hasattr(self._model, 'Arc'):
-                from pyomo.network import Arc as PyomoArc
-                for arc in self._model.component_objects(PyomoArc, active=True):
-                    src_port = arc.source
-                    dst_port = arc.destination
-                    if src_port and dst_port:
-                        connections.append({
-                            "source_unit": str(src_port.parent_block().name),
-                            "source_port": str(src_port.name),
-                            "dest_unit": str(dst_port.parent_block().name),
-                            "dest_port": str(dst_port.name),
-                        })
+            # Search in model.fs (IDAES convention) first, then model
+            connections = []
+            fs = getattr(self._model, 'fs', self._model)
+
+            from pyomo.network import Arc as PyomoArc
+            for arc in fs.component_objects(PyomoArc, active=True, descend_into=False):
+                src_port = arc.source
+                dst_port = arc.destination
+                if src_port and dst_port:
+                    connections.append({
+                        "source_unit": str(src_port.parent_block().name),
+                        "source_port": str(src_port.name),
+                        "dest_unit": str(dst_port.parent_block().name),
+                        "dest_port": str(dst_port.name),
+                    })
 
             result = self._initializer.initialize_flowsheet(
                 self._model,

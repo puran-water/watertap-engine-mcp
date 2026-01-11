@@ -1875,7 +1875,6 @@ def solve(
     session_id: str,
     solver: str = "ipopt",
     solver_options: Optional[Dict[str, Any]] = None,
-    background: bool = True,
 ) -> Dict[str, Any]:
     """Solve the flowsheet with automatic preprocessing.
 
@@ -1894,41 +1893,34 @@ def solve(
     For the full hygiene pipeline with pre/post diagnostics, use build_and_solve.
 
     Results are persisted to the session state after completion.
+    Solved KPIs (stream values, unit metrics) are extracted and stored
+    for retrieval via get_stream_results and get_unit_results.
 
     Args:
         session_id: Session to solve
         solver: Solver name (default: ipopt)
         solver_options: Solver-specific options
-        background: Run in background job (default: True)
 
     Returns:
-        If background=True: job_id for polling with get_solve_status
-        If background=False: solve results directly (not recommended for MCP)
+        job_id for polling with get_solve_status
     """
     try:
         session = session_manager.load(session_id)
     except FileNotFoundError:
         return {"error": f"Session '{session_id}' not found"}
 
-    if background:
-        job = job_manager.submit(
-            session_id=session_id,
-            job_type="solve",
-            params={"solver": solver, "solver_options": solver_options or {}},
-        )
-        return {
-            "session_id": session_id,
-            "job_id": job.job_id,
-            "status": job.status.value,
-            "message": "Solve job submitted. Poll with get_solve_status.",
-        }
-    else:
-        # Synchronous solve (not recommended for MCP)
-        return {
-            "session_id": session_id,
-            "status": "completed",
-            "termination_condition": "optimal",
-        }
+    # Always use background job to avoid blocking MCP connection
+    job = job_manager.submit(
+        session_id=session_id,
+        job_type="solve",
+        params={"solver": solver, "solver_options": solver_options or {}},
+    )
+    return {
+        "session_id": session_id,
+        "job_id": job.job_id,
+        "status": job.status.value,
+        "message": "Solve job submitted. Poll with get_solve_status.",
+    }
 
 
 @mcp.tool()
@@ -2373,22 +2365,26 @@ def load_zo_parameters(
     parameters_loaded = {}
     try:
         if hasattr(unit_block, "load_parameters_from_database"):
-            # Get database instance
+            # Set database on unit config (CORRECT approach per Codex review)
+            # Note: Database class is in watertap.core.wt_database, not zero_order_base
             try:
-                from watertap.core.zero_order_base import Database as ZODatabase
+                from watertap.core.wt_database import Database
 
-                if database == "default":
-                    db = ZODatabase()
-                else:
-                    db = ZODatabase(database)
+                if database != "default":
+                    db = Database(database)
+                    unit_block.config.database = db
             except ImportError:
                 return {
                     "session_id": session_id,
                     "unit_id": unit_id,
-                    "error": "WaterTAP zero-order database not available",
+                    "error": "WaterTAP database not available",
                 }
 
-            # Load parameters
+            # Set process_subtype on config if provided
+            if process_subtype:
+                unit_block.config.process_subtype = process_subtype
+
+            # Load parameters (method reads from config)
             unit_block.load_parameters_from_database(use_default_removal=True)
 
             # Extract loaded parameter values
@@ -2607,6 +2603,9 @@ def get_stream_results(
 ) -> Dict[str, Any]:
     """Get stream property tables.
 
+    After a successful solve, returns persisted KPIs (solved values).
+    Falls back to rebuilding the model if KPIs not available.
+
     Args:
         session_id: Session to get results for
         streams: Optional list of specific streams (unit.port format)
@@ -2619,7 +2618,41 @@ def get_stream_results(
     except FileNotFoundError:
         return {"error": f"Session '{session_id}' not found"}
 
-    # Build the Pyomo model
+    # Check if we have persisted KPIs from a solved session
+    if session.results and isinstance(session.results, dict) and "kpis" in session.results:
+        kpis = session.results["kpis"]
+        stream_kpis = kpis.get("streams", {})
+
+        if stream_kpis:
+            # Convert from unit-based to stream-based format if specific streams requested
+            if streams is not None:
+                filtered_streams = {}
+                for unit_id, ports in stream_kpis.items():
+                    for port_name, port_data in ports.items():
+                        stream_key = f"{unit_id}.{port_name}"
+                        if stream_key in streams:
+                            filtered_streams[stream_key] = port_data
+                return {
+                    "session_id": session_id,
+                    "source": "solved",
+                    "streams": filtered_streams,
+                }
+
+            # Return all streams
+            all_streams = {}
+            for unit_id, ports in stream_kpis.items():
+                for port_name, port_data in ports.items():
+                    stream_key = f"{unit_id}.{port_name}"
+                    all_streams[stream_key] = port_data
+
+            return {
+                "session_id": session_id,
+                "source": "solved",
+                "streams": all_streams,
+            }
+
+    # Fall back to rebuilding model (returns uninitialized/unsolved values)
+    # This path is used when session hasn't been solved yet
     try:
         from utils.model_builder import ModelBuilder, ModelBuildError
         builder = ModelBuilder(session)
@@ -2726,6 +2759,9 @@ def get_unit_results(
 ) -> Dict[str, Any]:
     """Get performance results for a specific unit.
 
+    After a successful solve, returns persisted KPIs (solved values).
+    Falls back to rebuilding the model if KPIs not available.
+
     Args:
         session_id: Session containing the unit
         unit_id: Unit to get results for
@@ -2743,7 +2779,27 @@ def get_unit_results(
 
     unit_inst = session.units[unit_id]
 
-    # Build the Pyomo model to extract actual performance metrics
+    # Check if we have persisted KPIs from a solved session
+    if session.results and isinstance(session.results, dict) and "kpis" in session.results:
+        kpis = session.results["kpis"]
+
+        # Get unit-level KPIs
+        unit_kpis = kpis.get("units", {}).get(unit_id, {})
+
+        # Get stream KPIs for this unit
+        stream_kpis = kpis.get("streams", {}).get(unit_id, {})
+
+        if unit_kpis or stream_kpis:
+            return {
+                "session_id": session_id,
+                "unit_id": unit_id,
+                "unit_type": unit_inst.unit_type,
+                "source": "solved",
+                "performance": unit_kpis,
+                "streams": stream_kpis,
+            }
+
+    # Fall back to rebuilding model (returns uninitialized/unsolved values)
     try:
         from utils.model_builder import ModelBuilder, ModelBuildError
 

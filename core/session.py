@@ -6,12 +6,52 @@ Provides session configuration and persistence for flowsheet building.
 import json
 import uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .property_registry import PropertyPackageType
+
+
+def _serialize_dict_keys(obj: Any) -> Any:
+    """Recursively convert tuple keys to strings for JSON serialization."""
+    if isinstance(obj, dict):
+        result = {}
+        for k, v in obj.items():
+            if isinstance(k, tuple):
+                # Convert tuple to string format: "(a, b)"
+                key = str(k)
+            else:
+                key = k
+            result[key] = _serialize_dict_keys(v)
+        return result
+    elif isinstance(obj, list):
+        return [_serialize_dict_keys(item) for item in obj]
+    else:
+        return obj
+
+
+def _deserialize_dict_keys(obj: Any) -> Any:
+    """Recursively convert string tuple keys back to tuples for Pyomo."""
+    if isinstance(obj, dict):
+        result = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and k.startswith("(") and k.endswith(")"):
+                # Parse tuple from string: "('Liq', 'H2O')" -> ('Liq', 'H2O')
+                try:
+                    import ast
+                    key = ast.literal_eval(k)
+                except (ValueError, SyntaxError):
+                    key = k
+            else:
+                key = k
+            result[key] = _deserialize_dict_keys(v)
+        return result
+    elif isinstance(obj, list):
+        return [_deserialize_dict_keys(item) for item in obj]
+    else:
+        return obj
 
 
 class SessionStatus(Enum):
@@ -65,8 +105,8 @@ class SessionConfig:
     solver_options: Dict[str, Any] = field(default_factory=dict)
 
     # Timestamps
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -310,7 +350,7 @@ class FlowsheetSession:
 
     def _update_timestamp(self) -> None:
         """Update the updated_at timestamp."""
-        self.config.updated_at = datetime.utcnow().isoformat()
+        self.config.updated_at = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -320,10 +360,11 @@ class FlowsheetSession:
             "units": {k: asdict(v) for k, v in self.units.items()},
             "connections": [asdict(c) for c in self.connections],
             "translators": self.translators,
-            "feed_state": self.feed_state,
+            # Serialize dicts with tuple keys (e.g., state_args with ('Liq', 'H2O'))
+            "feed_state": _serialize_dict_keys(self.feed_state),
             "solve_status": self.solve_status,
             "solve_message": self.solve_message,
-            "results": self.results,
+            "results": _serialize_dict_keys(self.results),
             "dof_status": self.dof_status,
             "total_dof": self.total_dof,
         }
@@ -347,10 +388,11 @@ class FlowsheetSession:
             units=units,
             connections=connections,
             translators=data.get("translators", {}),
-            feed_state=data.get("feed_state"),
+            # Deserialize tuple keys back from strings
+            feed_state=_deserialize_dict_keys(data.get("feed_state")),
             solve_status=data.get("solve_status"),
             solve_message=data.get("solve_message"),
-            results=data.get("results"),
+            results=_deserialize_dict_keys(data.get("results")),
             dof_status=data.get("dof_status", {}),
             total_dof=data.get("total_dof", 0),
         )

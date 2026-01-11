@@ -79,7 +79,10 @@ def _compute_order_with_sequential_decomposition(
 
     try:
         # Create SequentialDecomposition instance
+        # Use heuristic tear selection (no MIP solver needed)
+        # Default "mip" method uses cplex which may not be available
         seq = SequentialDecomposition()
+        seq.options.select_tear_method = "heuristic"
 
         # Set tear streams if specified
         if tear_streams:
@@ -101,12 +104,16 @@ def _compute_order_with_sequential_decomposition(
             if tear_arcs:
                 seq.set_tear_set(tear_arcs)
 
-        # Get computation order from SequentialDecomposition
-        order_blocks = seq.get_ssc_order(model.fs)
+        # Create graph and get computation order from SequentialDecomposition
+        # The Pyomo SequentialDecomposition API requires:
+        # 1. create_graph(block) to build the network graph
+        # 2. calculation_order(graph) to get the initialization order
+        graph = seq.create_graph(model.fs)
+        order_gen = seq.calculation_order(graph)
 
         # Extract unit IDs from block names
         order = []
-        for block in order_blocks:
+        for block in order_gen:
             # Extract unit ID from block path
             name = str(block.name) if hasattr(block, 'name') else str(block)
             # Remove 'fs.' prefix if present

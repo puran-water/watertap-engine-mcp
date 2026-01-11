@@ -22,6 +22,7 @@ import typer
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
+from rich import box
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -71,6 +72,11 @@ def create_session(
     name: str = typer.Option("", help="Session name"),
     description: str = typer.Option("", help="Session description"),
     property_package: str = typer.Option("SEAWATER", help="Default property package"),
+    property_package_config: str = typer.Option(
+        None,
+        "--config",
+        help="JSON config for packages like MCAS: '{\"solute_list\": [\"Na_+\"], \"charge\": {...}, \"mw_data\": {...}}'"
+    ),
 ):
     """Create a new WaterTAP flowsheet session."""
     try:
@@ -80,10 +86,20 @@ def create_session(
         rprint(f"[red]Invalid property package. Valid: {valid}[/red]")
         raise typer.Exit(1)
 
+    # Parse property_package_config JSON if provided
+    config_dict = {}
+    if property_package_config:
+        try:
+            config_dict = json.loads(property_package_config)
+        except json.JSONDecodeError as e:
+            rprint(f"[red]Invalid JSON in --config: {e}[/red]")
+            raise typer.Exit(1)
+
     config = SessionConfig(
         name=name,
         description=description,
         default_property_package=pkg_type,
+        property_package_config=config_dict,
     )
     session = FlowsheetSession(config=config)
     session_manager.save(session)
@@ -93,6 +109,7 @@ def create_session(
         "session_id": session.config.session_id,
         "name": name,
         "property_package": property_package,
+        "property_package_config": config_dict if config_dict else None,
     })
 
 
@@ -116,7 +133,7 @@ def list_sessions():
         rprint("[yellow]No sessions found[/yellow]")
         return
 
-    table = Table(title="Flowsheet Sessions")
+    table = Table(title="Flowsheet Sessions", box=box.ASCII)
     table.add_column("Session ID", style="cyan")
     table.add_column("Name")
     table.add_column("Status", style="green")
@@ -182,7 +199,7 @@ def list_units(
 
     units = list_units_registry(category=cat, property_package=pkg, is_idaes=is_idaes)
 
-    table = Table(title="Available Units")
+    table = Table(title="Available Units", box=box.ASCII)
     table.add_column("Unit Type", style="cyan")
     table.add_column("Category")
     table.add_column("Source")
@@ -202,7 +219,7 @@ def list_units(
 @app.command()
 def list_property_packages():
     """List all available property packages."""
-    table = Table(title="Property Packages")
+    table = Table(title="Property Packages", box=box.ASCII)
     table.add_column("Name", style="cyan")
     table.add_column("Class Name")
     table.add_column("Flow Basis")
@@ -225,7 +242,7 @@ def list_translators():
     """List available property package translators."""
     rprint("[yellow]Note: Only ASM↔ADM translators exist in WaterTAP![/yellow]\n")
 
-    table = Table(title="Translators")
+    table = Table(title="Translators", box=box.ASCII)
     table.add_column("Name", style="cyan")
     table.add_column("Source")
     table.add_column("Destination")
@@ -311,7 +328,9 @@ def create_feed(
     session_manager.save(session)
 
     rprint("[green]Feed created[/green]")
-    print_json(session.feed_state)
+    # Use serialized version to avoid tuple key JSON error
+    from core.session import _serialize_dict_keys
+    print_json(_serialize_dict_keys(session.feed_state))
 
 
 @app.command()
@@ -382,7 +401,7 @@ def connect_units(
         raise typer.Exit(1)
 
     session_manager.save(session)
-    rprint(f"[green]Connected:[/green] {source} → {dest}")
+    rprint(f"[green]Connected:[/green] {source} -> {dest}")
 
 
 # ============================================================================
@@ -418,7 +437,7 @@ def get_dof_status(session_id: str = typer.Option(..., help="Session ID")):
 
     total_dof = sum(dof_by_unit.values())
 
-    table = Table(title="DOF Status")
+    table = Table(title="DOF Status", box=box.ASCII)
     table.add_column("Unit", style="cyan")
     table.add_column("DOF", justify="right")
     table.add_column("Unfixed Variables")
@@ -433,9 +452,9 @@ def get_dof_status(session_id: str = typer.Option(..., help="Session ID")):
     console.print(table)
 
     if total_dof == 0:
-        rprint(f"\n[green]✓ Total DOF = 0 - Ready to solve![/green]")
+        rprint(f"\n[green][OK] Total DOF = 0 - Ready to solve![/green]")
     else:
-        rprint(f"\n[red]✗ Total DOF = {total_dof} - Fix variables before solving[/red]")
+        rprint(f"\n[red][X] Total DOF = {total_dof} - Fix variables before solving[/red]")
 
 
 @app.command()
@@ -553,7 +572,7 @@ def initialize_flowsheet(session_id: str = typer.Option(..., help="Session ID"))
 
     rprint("[green]Flowsheet initialized[/green]")
     for unit_id in session.units:
-        rprint(f"  ✓ {unit_id}")
+        rprint(f"  [OK] {unit_id}")
 
 
 @app.command()

@@ -14,7 +14,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,7 +43,7 @@ class Job:
     message: str = ""
 
     # Timing
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
 
@@ -179,7 +179,7 @@ class JobManager:
             )
             self._processes[job.job_id] = process
             job.status = JobStatus.RUNNING
-            job.started_at = datetime.utcnow().isoformat()
+            job.started_at = datetime.now(timezone.utc).isoformat()
             job.pid = process.pid
             self._save_job(job)
         except Exception as e:
@@ -266,7 +266,7 @@ class JobManager:
                 del self._processes[job_id]
 
             job.status = JobStatus.CANCELLED
-            job.completed_at = datetime.utcnow().isoformat()
+            job.completed_at = datetime.now(timezone.utc).isoformat()
             self._save_job(job)
             return True
 
@@ -306,7 +306,7 @@ class JobManager:
         """
         with self._lock:
             removed = 0
-            cutoff = datetime.utcnow().timestamp() - (max_age_hours * 3600)
+            cutoff = datetime.now(timezone.utc).timestamp() - (max_age_hours * 3600)
 
             for job_id, job in list(self._jobs.items()):
                 if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
@@ -366,7 +366,7 @@ class JobManager:
                 job.error = error
 
             if status in (JobStatus.COMPLETED, JobStatus.FAILED):
-                job.completed_at = datetime.utcnow().isoformat()
+                job.completed_at = datetime.now(timezone.utc).isoformat()
 
             self._save_job(job)
 
@@ -396,7 +396,8 @@ def update_job_from_worker(jobs_dir: Path, job_id: str, **kwargs) -> None:
             data[key] = value
 
     if data.get("status") in ("completed", "failed"):
-        data["completed_at"] = datetime.utcnow().isoformat()
+        data["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     with open(job_path, "w") as f:
         json.dump(data, f, indent=2)
+        f.flush()  # Ensure data is written to disk
