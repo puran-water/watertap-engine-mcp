@@ -535,26 +535,73 @@ def set_scaling_factor(
 @app.command()
 def calculate_scaling_factors(session_id: str = typer.Option(..., help="Session ID")):
     """Calculate scaling factors using IDAES utilities."""
-    try:
-        session = session_manager.load(session_id)
-    except FileNotFoundError:
-        rprint(f"[red]Session '{session_id}' not found[/red]")
+    # Import server function to do actual work
+    import server as srv
+
+    result = srv.calculate_scaling_factors(session_id)
+
+    if "error" in result:
+        rprint(f"[red]Error: {result['error']}[/red]")
         raise typer.Exit(1)
 
     rprint("[green]Scaling factors calculated[/green]")
+    if result.get("scaled_count", 0) > 0:
+        rprint(f"  Scaled {result['scaled_count']} variables")
     rprint("Run 'report-scaling-issues' to check for problems")
 
 
 @app.command()
 def report_scaling_issues(session_id: str = typer.Option(..., help="Session ID")):
     """Report unscaled or badly-scaled variables/constraints."""
-    try:
-        session = session_manager.load(session_id)
-    except FileNotFoundError:
-        rprint(f"[red]Session '{session_id}' not found[/red]")
+    # Import server function to do actual work
+    import server as srv
+
+    result = srv.report_scaling_issues(session_id)
+
+    if "error" in result:
+        rprint(f"[red]Error: {result['error']}[/red]")
         raise typer.Exit(1)
 
-    rprint("[green]No scaling issues found[/green]")
+    has_issues = False
+
+    # Report unscaled variables
+    if result.get("unscaled_vars"):
+        has_issues = True
+        rprint(f"[yellow]Unscaled variables ({len(result['unscaled_vars'])}):[/yellow]")
+        for var in result["unscaled_vars"][:10]:  # Show first 10
+            rprint(f"  - {var}")
+        if len(result["unscaled_vars"]) > 10:
+            rprint(f"  ... and {len(result['unscaled_vars']) - 10} more")
+
+    # Report badly scaled variables
+    if result.get("badly_scaled_vars"):
+        has_issues = True
+        rprint(f"[yellow]Badly scaled variables ({len(result['badly_scaled_vars'])}):[/yellow]")
+        for var in result["badly_scaled_vars"][:10]:
+            rprint(f"  - {var}")
+        if len(result["badly_scaled_vars"]) > 10:
+            rprint(f"  ... and {len(result['badly_scaled_vars']) - 10} more")
+
+    # Report unscaled constraints
+    if result.get("unscaled_cons"):
+        has_issues = True
+        rprint(f"[yellow]Unscaled constraints ({len(result['unscaled_cons'])}):[/yellow]")
+        for con in result["unscaled_cons"][:10]:
+            rprint(f"  - {con}")
+        if len(result["unscaled_cons"]) > 10:
+            rprint(f"  ... and {len(result['unscaled_cons']) - 10} more")
+
+    # Report badly scaled constraints
+    if result.get("badly_scaled_cons"):
+        has_issues = True
+        rprint(f"[yellow]Badly scaled constraints ({len(result['badly_scaled_cons'])}):[/yellow]")
+        for con in result["badly_scaled_cons"][:10]:
+            rprint(f"  - {con}")
+        if len(result["badly_scaled_cons"]) > 10:
+            rprint(f"  ... and {len(result['badly_scaled_cons']) - 10} more")
+
+    if not has_issues:
+        rprint("[green]No scaling issues found[/green]")
 
 
 # ============================================================================
@@ -564,15 +611,31 @@ def report_scaling_issues(session_id: str = typer.Option(..., help="Session ID")
 @app.command()
 def initialize_flowsheet(session_id: str = typer.Option(..., help="Session ID")):
     """Initialize entire flowsheet in topological order."""
-    try:
-        session = session_manager.load(session_id)
-    except FileNotFoundError:
-        rprint(f"[red]Session '{session_id}' not found[/red]")
+    # Import server function to do actual work
+    import server as srv
+
+    rprint("[blue]Initializing flowsheet...[/blue]")
+
+    result = srv.initialize_flowsheet(session_id)
+
+    if "error" in result:
+        rprint(f"[red]Error: {result['error']}[/red]")
         raise typer.Exit(1)
 
     rprint("[green]Flowsheet initialized[/green]")
-    for unit_id in session.units:
-        rprint(f"  [OK] {unit_id}")
+
+    # Show initialization order
+    if result.get("initialization_order"):
+        rprint("Initialization order:")
+        for i, unit_id in enumerate(result["initialization_order"], 1):
+            status = result.get("unit_status", {}).get(unit_id, "initialized")
+            color = "green" if status == "initialized" else "yellow"
+            rprint(f"  {i}. [{color}]{unit_id}[/{color}] - {status}")
+
+    # Show any warnings
+    if result.get("warnings"):
+        for warning in result["warnings"]:
+            rprint(f"[yellow]Warning: {warning}[/yellow]")
 
 
 @app.command()
@@ -581,7 +644,11 @@ def solve(
     solver: str = typer.Option("ipopt", help="Solver name"),
     background: bool = typer.Option(True, help="Run in background"),
 ):
-    """Solve the flowsheet."""
+    """Solve the flowsheet.
+
+    By default runs in background (recommended). Use --no-background for
+    synchronous solve (may block for long time with large models).
+    """
     try:
         session = session_manager.load(session_id)
     except FileNotFoundError:
@@ -597,8 +664,29 @@ def solve(
         rprint(f"[green]Solve job submitted:[/green] {job.job_id}")
         rprint(f"Check status with: python cli.py get-solve-status {job.job_id}")
     else:
-        rprint("[green]Solve completed[/green]")
-        rprint("Termination: optimal")
+        # Synchronous solve - actually run the solve
+        rprint("[blue]Solving flowsheet synchronously...[/blue]")
+        rprint("[yellow]Note: For large models, use background mode (--background)[/yellow]")
+
+        # Import and run worker directly for synchronous solve
+        try:
+            from worker import run_solve
+            result = run_solve(session_id, solver=solver)
+
+            if result.get("status") == "optimal":
+                rprint("[green]Solve completed[/green]")
+                rprint(f"Termination: {result.get('termination_condition', 'optimal')}")
+                if result.get("solve_time"):
+                    rprint(f"Solve time: {result['solve_time']:.2f}s")
+            else:
+                rprint(f"[yellow]Solve finished with status: {result.get('status', 'unknown')}[/yellow]")
+                rprint(f"Termination: {result.get('termination_condition', 'unknown')}")
+                if result.get("message"):
+                    rprint(f"Message: {result['message']}")
+
+        except Exception as e:
+            rprint(f"[red]Solve failed: {e}[/red]")
+            raise typer.Exit(1)
 
 
 @app.command()

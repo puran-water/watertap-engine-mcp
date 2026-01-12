@@ -177,6 +177,18 @@ python cli.py --help
 | `list_zo_databases` | `list_zo_databases` | `zo databases` | Available databases |
 | `get_zo_unit_parameters` | `get_zo_unit_parameters` | `zo params` | Unit parameters |
 
+### Costing Tools
+
+| Tool | MCP | CLI | Description |
+|------|-----|-----|-------------|
+| `enable_costing` | `enable_costing` | `costing enable` | Enable costing block |
+| `add_unit_costing` | `add_unit_costing` | `costing add-unit` | Enable costing for unit |
+| `disable_unit_costing` | `disable_unit_costing` | `costing disable-unit` | Disable unit costing |
+| `set_costing_parameters` | `set_costing_parameters` | `costing set-params` | Set cost parameters |
+| `list_costed_units` | `list_costed_units` | `costing list` | Show costing status |
+| `compute_costing` | `compute_costing` | `costing compute` | Calculate LCOW, CapEx, OpEx |
+| `get_costing` | `get_costing` | `costing results` | Get costing results |
+
 ### Results Tools
 
 | Tool | MCP | CLI | Description |
@@ -348,7 +360,7 @@ pip install watertap idaes-pse pyomo
 
 ```
 watertap-engine-mcp/
-├── server.py              # MCP Adapter (FastMCP) - 51 tools
+├── server.py              # MCP Adapter (FastMCP) - 57 tools
 ├── cli.py                 # CLI Adapter (typer)
 ├── worker.py              # Background job worker
 ├── core/
@@ -375,7 +387,7 @@ watertap-engine-mcp/
 │   ├── nf_softening.py
 │   └── mvc_crystallizer.py
 ├── jobs/                       # Session/job persistence (runtime)
-└── tests/                      # 206 unit tests
+└── tests/                      # 350+ tests
 ```
 
 ## Companion Skill
@@ -393,7 +405,7 @@ The skill orchestrates the atomic server tools - server provides explicit operat
 ## Testing
 
 ```bash
-# Run all tests (206)
+# Run all tests
 pytest tests/ -v
 
 # Skip slow tests

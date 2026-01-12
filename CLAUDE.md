@@ -5,7 +5,7 @@ MCP server for WaterTAP water treatment process modeling. Provides atomic, expli
 ## Architecture
 
 **Dual Adapter Pattern:**
-- `server.py` - FastMCP server (51 tools) for MCP clients
+- `server.py` - FastMCP server (57 tools) for MCP clients
 - `cli.py` - Typer CLI with same functionality
 
 **Companion Skill:**
@@ -21,7 +21,7 @@ The `watertap-flowsheet-builder` skill (in `~/skills/watertap-skill/`) provides 
 
 ```
 watertap-engine-mcp/
-├── server.py              # FastMCP server (51 tools)
+├── server.py              # FastMCP server (57 tools)
 ├── cli.py                 # Typer CLI adapter
 ├── worker.py              # Background job worker
 ├── core/
@@ -48,7 +48,7 @@ watertap-engine-mcp/
 │   ├── nf_softening.py
 │   └── mvc_crystallizer.py
 ├── jobs/                       # Session/job persistence (runtime)
-├── tests/                      # 297 tests (222 unit + 75 E2E)
+├── tests/                      # 373 tests
 └── docs/plans/                 # Implementation plans
 ```
 
@@ -67,7 +67,7 @@ These DO NOT exist:
 
 For non-biological flowsheets, use the SAME property package throughout.
 
-## Tool Categories (51 Total)
+## Tool Categories (57 Total)
 
 ### Session (4)
 - `create_session` - New session with property package
@@ -113,10 +113,19 @@ For non-biological flowsheets, use the SAME property package throughout.
 - `list_zo_databases` - Available databases
 - `get_zo_unit_parameters` - Unit parameters
 
-### Results (3)
+### Costing (6)
+- `enable_costing` - Enable flowsheet costing (WaterTAP or ZeroOrder)
+- `add_unit_costing` - Enable costing for specific unit
+- `disable_unit_costing` - Disable unit costing
+- `set_costing_parameters` - Set economic parameters
+- `list_costed_units` - List units with costing status
+- `compute_costing` - Calculate LCOW, CapEx, OpEx after solve
+
+### Results (4)
 - `get_stream_results` - Stream tables
 - `get_unit_results` - Unit performance
 - `get_costing` - LCOW, CapEx, OpEx
+- `get_results` - All results
 
 ## Running
 
@@ -181,6 +190,50 @@ The server provides two solve approaches:
 Both paths persist results to the session for retrieval via `get_stream_results` and `get_unit_results`.
 
 ## Development Progress
+
+### 2026-01-12: Code Review Remediation Plan Complete
+
+**Plan:** `docs/plans/code-review-remediation-plan.md` - All 7 phases implemented and verified by Codex
+
+**Phase 1 - Variable Path Resolution:**
+- Implemented comprehensive path resolution in `utils/model_builder.py`
+- Handles dotted paths like `control_volume.properties_out[0].pressure`
+- Supports wildcards like `feed_side.cp_modulus[0,*,*]`
+- Uses Pyomo's `find_component()` with fallback to manual resolution
+- 26 tests in `tests/test_path_resolution.py`
+
+**Phase 2 - CLI Stub Remediation:**
+- Fixed 4 CLI commands that were stubs (printing success without doing work)
+- CLI now calls server functions directly for parity
+- 12 tests in `tests/test_cli_parity.py`
+
+**Phase 3 - validate_flowsheet Enhancement:**
+- Added orphan port detection (unconnected inlet/outlet ports)
+- Added connection-level property package compatibility checking
+- Detects when translator is needed but missing
+- 9 tests in `tests/test_validate_flowsheet.py`
+
+**Phase 4 - Costing Implementation (6 new tools):**
+- `enable_costing(session_id, costing_package)` - Enable WaterTAP or ZeroOrder costing
+- `add_unit_costing(session_id, unit_id)` - Enable costing on specific units
+- `disable_unit_costing(session_id, unit_id)` - Disable unit costing
+- `set_costing_parameters(session_id, ...)` - Set economic parameters
+- `list_costed_units(session_id)` - List units with costing status
+- `compute_costing(session_id)` - Calculate LCOW, CapEx, OpEx after solve
+- ModelBuilder now creates costing blocks during build if enabled
+- 22 tests in `tests/test_costing.py`
+
+**Phase 5 - Session Persistence:**
+- Fixed `costing_config` not persisting (added to `to_dict`/`from_dict`)
+- Fixed `load_zo_parameters` to persist database, process_subtype, and parameters
+
+**Phase 6 - Test Coverage:**
+- Total: 373 tests passing
+- New test files: `test_path_resolution.py`, `test_validate_flowsheet.py`, `test_costing.py`, `test_cli_parity.py`
+
+**Phase 7 - Documentation:**
+- CLAUDE.md updated (57 tools)
+- README.md updated with Costing section
 
 ### 2026-01-11 (Session 2): Code Review Feedback & Recovery Integration
 

@@ -9,7 +9,7 @@ are acceptable.
 """
 
 import importlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from core.session import FlowsheetSession, UnitInstance, Connection
 from core.unit_registry import UNITS, UnitSpec
@@ -74,6 +74,9 @@ class ModelBuilder:
 
             # Apply scaling factors
             self._apply_scaling_factors()
+
+            # Create costing blocks if enabled
+            self._create_costing()
 
             return self._model
 
@@ -504,57 +507,278 @@ class ModelBuilder:
             for var_path, var_value in unit_inst.fixed_vars.items():
                 self._fix_variable(unit_block, var_path, var_value)
 
-    def _fix_variable(self, unit: Any, var_path: str, value: float):
-        """Fix a variable on a unit block.
+    def _resolve_variable_path(self, unit: Any, var_path: str) -> Tuple[Optional[Any], Optional[Any]]:
+        """Resolve a variable path to the actual Pyomo variable.
+
+        Handles:
+        - Simple: "area"
+        - Indexed: "A_comp[0,H2O]"
+        - Dotted: "control_volume.properties_out[0].pressure"
+        - Port: "permeate.pressure[0]"
+        - Wildcards: "feed_side.cp_modulus[0,*,*]" (returns list of matches)
+
+        Args:
+            unit: Unit block to resolve path on
+            var_path: Variable path string
+
+        Returns:
+            Tuple of (variable_or_list, index_or_None)
+            - For wildcards: (list of (var, index) tuples, None)
+            - For indexed: (indexed_var, index)
+            - For scalar: (var, None)
+            - On failure: (None, None)
+        """
+        import sys
+
+        # Handle wildcards like [0,*,*]
+        if '*' in var_path:
+            return self._resolve_wildcard_path(unit, var_path)
+
+        try:
+            # Try Pyomo's find_component first (handles dotted paths natively)
+            if hasattr(unit, 'find_component'):
+                component = unit.find_component(var_path)
+                if component is not None:
+                    # find_component returns the indexed element directly for paths like pressure[0]
+                    return component, None
+
+            # Fallback: manual path resolution for complex cases
+            return self._resolve_path_manually(unit, var_path)
+
+        except Exception as e:
+            print(f"Warning: Cannot resolve path {var_path}: {e}", file=sys.stderr)
+            return None, None
+
+    def _resolve_path_manually(self, unit: Any, var_path: str) -> Tuple[Optional[Any], Optional[Any]]:
+        """Manually resolve a dotted variable path.
+
+        Parses paths like:
+        - "control_volume.properties_out[0].pressure"
+        - "permeate.pressure[0]"
+        - "A_comp[0,H2O]"
+
+        Args:
+            unit: Starting unit block
+            var_path: Variable path to resolve
+
+        Returns:
+            (variable, index) or (None, None) on failure
+        """
+        current = unit
+        remaining = var_path
+        final_index = None
+
+        while remaining:
+            # Find next dot that's not inside brackets
+            dot_pos = self._find_dot_outside_brackets(remaining)
+
+            if dot_pos == -1:
+                segment = remaining
+                remaining = ""
+            else:
+                segment = remaining[:dot_pos]
+                remaining = remaining[dot_pos + 1:]
+
+            # Parse segment for attribute name and optional index
+            if "[" in segment:
+                attr_name, index_str = segment.split("[", 1)
+                index_str = index_str.rstrip("]")
+                indices = self._parse_index(index_str)
+
+                current = getattr(current, attr_name, None)
+                if current is None:
+                    return None, None
+
+                # Apply index if not final segment, else save for return
+                if remaining:
+                    # Intermediate segment - apply index to traverse
+                    try:
+                        if len(indices) == 1:
+                            current = current[indices[0]]
+                        else:
+                            current = current[tuple(indices)]
+                    except (KeyError, IndexError):
+                        return None, None
+                else:
+                    # Final segment - return with index
+                    final_index = indices[0] if len(indices) == 1 else tuple(indices)
+            else:
+                current = getattr(current, segment, None)
+                if current is None:
+                    return None, None
+
+        return current, final_index
+
+    def _resolve_wildcard_path(self, unit: Any, var_path: str) -> Tuple[Optional[List], None]:
+        """Resolve paths with wildcards like feed_side.cp_modulus[0,*,*].
+
+        Wildcards (*) match all indices at that position.
 
         Args:
             unit: Unit block
-            var_path: Variable path (e.g., "A_comp[0, H2O]" or "area")
-            value: Value to fix
+            var_path: Path with wildcards
+
+        Returns:
+            (list of (var_at_index, index) tuples, None) or (None, None)
         """
+        import sys
+
+        # Split path at the wildcard index
+        # e.g., "feed_side.cp_modulus[0,*,*]" -> base="feed_side.cp_modulus", pattern="[0,*,*]"
+        if "[" not in var_path:
+            return None, None
+
+        bracket_pos = var_path.rfind("[")
+        base_path = var_path[:bracket_pos]
+        index_pattern = var_path[bracket_pos + 1:].rstrip("]")
+
+        # Resolve base path to get the indexed variable
+        base_var, _ = self._resolve_path_manually(unit, base_path)
+        if base_var is None:
+            # Try find_component for base
+            if hasattr(unit, 'find_component'):
+                base_var = unit.find_component(base_path)
+            if base_var is None:
+                return None, None
+
+        # Parse the index pattern
+        pattern_parts = [p.strip() for p in index_pattern.split(",")]
+
+        # Collect matching indices
+        matches = []
         try:
-            # Handle indexed variables like "A_comp[0, H2O]"
-            if "[" in var_path:
-                var_name, index_str = var_path.split("[", 1)
-                index_str = index_str.rstrip("]")
-                # Parse index - could be tuple or single value
-                indices = [s.strip() for s in index_str.split(",")]
-
-                var = getattr(unit, var_name, None)
-                if var is None:
-                    return
-
-                # Build index tuple
-                parsed_indices = []
-                for idx in indices:
-                    # Try int first, then float, then keep as string
-                    try:
-                        parsed_indices.append(int(idx))
-                    except ValueError:
-                        try:
-                            parsed_indices.append(float(idx))
-                        except ValueError:
-                            parsed_indices.append(idx)
-
-                if len(parsed_indices) == 1:
-                    var[parsed_indices[0]].fix(value)
+            for idx in base_var.index_set():
+                # Ensure idx is a tuple for comparison
+                if not isinstance(idx, tuple):
+                    idx_tuple = (idx,)
                 else:
-                    var[tuple(parsed_indices)].fix(value)
+                    idx_tuple = idx
 
-            else:
-                # Simple variable
-                var = getattr(unit, var_path, None)
-                if var is not None:
-                    if hasattr(var, 'fix'):
-                        var.fix(value)
-                    elif hasattr(var, '__iter__'):
-                        # Indexed var, fix all indices
-                        for v in var.values():
-                            v.fix(value)
+                if len(idx_tuple) != len(pattern_parts):
+                    continue
+
+                # Check if this index matches the pattern
+                match = True
+                for i, (actual, pattern) in enumerate(zip(idx_tuple, pattern_parts)):
+                    if pattern != '*':
+                        # Parse pattern value
+                        parsed_pattern = self._parse_single_index(pattern)
+                        if actual != parsed_pattern:
+                            match = False
+                            break
+
+                if match:
+                    matches.append((base_var, idx))
 
         except Exception as e:
-            # Log warning instead of silent skip
-            import sys
+            print(f"Warning: Cannot iterate wildcard indices for {var_path}: {e}", file=sys.stderr)
+            return None, None
+
+        if not matches:
+            return None, None
+
+        return matches, None
+
+    def _find_dot_outside_brackets(self, s: str) -> int:
+        """Find position of first dot not inside brackets.
+
+        Args:
+            s: String to search
+
+        Returns:
+            Position of dot, or -1 if not found
+        """
+        depth = 0
+        for i, c in enumerate(s):
+            if c == '[':
+                depth += 1
+            elif c == ']':
+                depth -= 1
+            elif c == '.' and depth == 0:
+                return i
+        return -1
+
+    def _parse_index(self, index_str: str) -> List:
+        """Parse index string into list of values.
+
+        Args:
+            index_str: Comma-separated index string like "0, H2O"
+
+        Returns:
+            List of parsed index values
+        """
+        indices = [s.strip() for s in index_str.split(",")]
+        return [self._parse_single_index(idx) for idx in indices]
+
+    def _parse_single_index(self, idx: str) -> Any:
+        """Parse a single index value.
+
+        Args:
+            idx: Index string
+
+        Returns:
+            Parsed value (int, float, or string)
+        """
+        # Try int first
+        try:
+            return int(idx)
+        except ValueError:
+            pass
+        # Try float
+        try:
+            return float(idx)
+        except ValueError:
+            pass
+        # Keep as string
+        return idx
+
+    def _fix_variable(self, unit: Any, var_path: str, value: float):
+        """Fix a variable on a unit block.
+
+        Supports:
+        - Simple variables: "area"
+        - Indexed variables: "A_comp[0,H2O]"
+        - Dotted paths: "control_volume.properties_out[0].pressure"
+        - Port properties: "permeate.pressure[0]"
+        - Wildcards: "feed_side.cp_modulus[0,*,*]" (fixes all matching indices)
+
+        Args:
+            unit: Unit block
+            var_path: Variable path (e.g., "control_volume.properties_out[0].pressure")
+            value: Value to fix
+        """
+        import sys
+
+        try:
+            var, index = self._resolve_variable_path(unit, var_path)
+
+            if var is None:
+                print(f"Warning: Variable path not found: {var_path}", file=sys.stderr)
+                return
+
+            # Handle wildcard results (list of matches)
+            if isinstance(var, list):
+                for var_item, idx in var:
+                    try:
+                        if idx is not None:
+                            var_item[idx].fix(value)
+                        elif hasattr(var_item, 'fix'):
+                            var_item.fix(value)
+                    except Exception as e:
+                        print(f"Warning: Cannot fix {var_path} at index {idx}: {e}", file=sys.stderr)
+                return
+
+            # Handle indexed variable with final index
+            if index is not None:
+                var[index].fix(value)
+            elif hasattr(var, 'fix'):
+                var.fix(value)
+            elif hasattr(var, '__iter__') and hasattr(var, 'values'):
+                # Indexed var without specific index - fix all
+                for v in var.values():
+                    v.fix(value)
+
+        except Exception as e:
             print(f"Warning: Cannot fix variable {var_path}: {e}", file=sys.stderr)
 
     def _apply_scaling_factors(self):
@@ -576,46 +800,150 @@ class ModelBuilder:
     def _set_scaling(self, unit: Any, var_path: str, factor: float, iscale):
         """Set scaling factor for a variable.
 
+        Supports:
+        - Simple variables: "area"
+        - Indexed variables: "A_comp[0,H2O]"
+        - Dotted paths: "control_volume.properties_out[0].pressure"
+        - Port properties: "permeate.pressure[0]"
+        - Wildcards: "feed_side.cp_modulus[0,*,*]" (scales all matching indices)
+
         Args:
             unit: Unit block
             var_path: Variable path
             factor: Scaling factor
             iscale: IDAES scaling module
         """
+        import sys
+
         try:
-            if "[" in var_path:
-                var_name, index_str = var_path.split("[", 1)
-                index_str = index_str.rstrip("]")
-                indices = [s.strip() for s in index_str.split(",")]
+            var, index = self._resolve_variable_path(unit, var_path)
 
-                var = getattr(unit, var_name, None)
-                if var is None:
-                    return
+            if var is None:
+                print(f"Warning: Variable path not found for scaling: {var_path}", file=sys.stderr)
+                return
 
-                parsed_indices = []
-                for idx in indices:
+            # Handle wildcard results (list of matches)
+            if isinstance(var, list):
+                for var_item, idx in var:
                     try:
-                        parsed_indices.append(int(idx))
-                    except ValueError:
-                        try:
-                            parsed_indices.append(float(idx))
-                        except ValueError:
-                            parsed_indices.append(idx)
+                        if idx is not None:
+                            iscale.set_scaling_factor(var_item[idx], factor)
+                        else:
+                            iscale.set_scaling_factor(var_item, factor)
+                    except Exception as e:
+                        print(f"Warning: Cannot scale {var_path} at index {idx}: {e}", file=sys.stderr)
+                return
 
-                if len(parsed_indices) == 1:
-                    iscale.set_scaling_factor(var[parsed_indices[0]], factor)
-                else:
-                    iscale.set_scaling_factor(var[tuple(parsed_indices)], factor)
-
+            # Handle indexed variable with final index
+            if index is not None:
+                iscale.set_scaling_factor(var[index], factor)
             else:
-                var = getattr(unit, var_path, None)
-                if var is not None:
-                    iscale.set_scaling_factor(var, factor)
+                iscale.set_scaling_factor(var, factor)
 
         except Exception as e:
-            # Log warning instead of silent skip
-            import sys
             print(f"Warning: Cannot set scaling for {var_path}: {e}", file=sys.stderr)
+
+    def _create_costing(self):
+        """Create costing blocks if costing is enabled in session.
+
+        Creates:
+        - System-level costing block (WaterTAPCosting or ZeroOrderCosting)
+        - UnitModelCostingBlock for each unit with costing_enabled=True
+        - Calls cost_process() to aggregate costs
+        """
+        import sys
+
+        # Check if costing is enabled
+        costing_config = self._session.costing_config
+        if not costing_config or not costing_config.get("enabled"):
+            return
+
+        costing_package = costing_config.get("package", "watertap")
+
+        try:
+            from idaes.core import UnitModelCostingBlock
+
+            # Create the appropriate costing block
+            if costing_package == "watertap":
+                from watertap.costing import WaterTAPCosting
+                self._flowsheet.costing = WaterTAPCosting()
+            elif costing_package == "zero_order":
+                from watertap.costing import ZeroOrderCosting
+                self._flowsheet.costing = ZeroOrderCosting()
+            else:
+                print(f"Warning: Unknown costing package '{costing_package}'", file=sys.stderr)
+                return
+
+            costing_block = self._flowsheet.costing
+
+            # Apply costing parameters if provided
+            if "electricity_cost" in costing_config:
+                try:
+                    costing_block.electricity_cost.fix(costing_config["electricity_cost"])
+                except Exception as e:
+                    print(f"Warning: Cannot set electricity_cost: {e}", file=sys.stderr)
+
+            if "utilization_factor" in costing_config:
+                try:
+                    costing_block.utilization_factor.fix(costing_config["utilization_factor"])
+                except Exception as e:
+                    print(f"Warning: Cannot set utilization_factor: {e}", file=sys.stderr)
+
+            # Add UnitModelCostingBlock to each unit with costing enabled
+            for unit_id, unit_inst in self._session.units.items():
+                if not unit_inst.costing_enabled:
+                    continue
+
+                unit_block = self._units.get(unit_id)
+                if unit_block is None:
+                    print(f"Warning: Cannot add costing to unit '{unit_id}': block not found", file=sys.stderr)
+                    continue
+
+                try:
+                    unit_block.costing = UnitModelCostingBlock(
+                        flowsheet_costing_block=costing_block
+                    )
+                except Exception as e:
+                    print(f"Warning: Cannot add costing to unit '{unit_id}': {e}", file=sys.stderr)
+
+            # Call cost_process to aggregate costs
+            try:
+                costing_block.cost_process()
+            except Exception as e:
+                print(f"Warning: cost_process() failed: {e}", file=sys.stderr)
+
+            # Add LCOW calculation if there's a product stream
+            # Look for common product streams: permeate, treated, product, outlet
+            product_flow = None
+            for unit_id, unit_block in self._units.items():
+                # Try common product port names
+                for port_name in ["permeate", "treated", "product", "outlet"]:
+                    port = getattr(unit_block, port_name, None)
+                    if port is not None:
+                        # Try to get flow_vol from the port
+                        flow_vol = getattr(port, "flow_vol", None)
+                        if flow_vol is not None:
+                            try:
+                                # Get flow at time 0
+                                product_flow = flow_vol[0]
+                                break
+                            except (KeyError, TypeError):
+                                continue
+                if product_flow is not None:
+                    break
+
+            if product_flow is not None:
+                try:
+                    costing_block.add_LCOW(product_flow)
+                except Exception as e:
+                    print(f"Warning: add_LCOW() failed: {e}", file=sys.stderr)
+            else:
+                print("Warning: No product stream found for LCOW calculation", file=sys.stderr)
+
+        except ImportError as e:
+            print(f"Warning: Cannot create costing - missing imports: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Costing creation failed: {e}", file=sys.stderr)
 
     def get_units(self) -> Dict[str, Any]:
         """Get the created unit blocks.

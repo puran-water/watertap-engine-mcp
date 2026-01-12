@@ -2,7 +2,7 @@
 """WaterTAP Engine MCP Server.
 
 FastMCP server exposing WaterTAP flowsheet building and solving capabilities.
-Provides 51 atomic tools organized by category:
+Provides 56 atomic tools organized by category:
 
 Core Tools (34):
 - Session Management (5): create_session, create_watertap_session, get_session, list_sessions, delete_session
@@ -18,8 +18,9 @@ Solver Operations (10):
 - Solving (5): check_solve, solve, build_and_solve, get_solve_status, get_job_status, get_job_results
 - Diagnostics (4): run_diagnostics, diagnose_failure, get_constraint_residuals, get_bound_violations
 
-Domain-Specific (7):
+Domain-Specific (12):
 - Zero-Order (3): load_zo_parameters, list_zo_databases, get_zo_unit_parameters
+- Costing (5): enable_costing, add_unit_costing, disable_unit_costing, set_costing_parameters, list_costed_units
 - Results (4): get_results, get_stream_results, get_unit_results, get_costing
 
 Design Principles:
@@ -44,7 +45,7 @@ from core import (
     find_translator_chain,
     UnitCategory,
     UNITS,
-    get_unit_spec,
+    get_unit_spec as get_unit_spec_from_registry,
     list_units as list_units_registry,
     WaterTAPState,
     SessionConfig,
@@ -287,7 +288,7 @@ def get_unit_spec(unit_type: str) -> Dict[str, Any]:
         typical values, scaling defaults, and initialization hints
     """
     try:
-        spec = get_unit_spec(unit_type)
+        spec = get_unit_spec_from_registry(unit_type)
         return {
             "unit_type": spec.unit_type,
             "class_name": spec.class_name,
@@ -443,10 +444,9 @@ def create_unit(
     except FileNotFoundError:
         return {"error": f"Session '{session_id}' not found"}
 
-    try:
-        spec = get_unit_spec(unit_type)
-    except KeyError:
-        return {"error": f"Unknown unit type: {unit_type}"}
+    spec = get_unit_spec(unit_type)
+    if "error" in spec:
+        return spec
 
     try:
         unit = session.add_unit(unit_id, unit_type, config or {})
@@ -459,15 +459,8 @@ def create_unit(
         "session_id": session_id,
         "unit_id": unit_id,
         "unit_type": unit_type,
-        "dof_requirements": [
-            {
-                "name": v.name,
-                "description": v.description,
-                "typical_default": v.typical_default,
-            }
-            for v in spec.required_fixes
-        ],
-        "typical_values": spec.typical_values,
+        "dof_requirements": spec.get("required_fixes", []),
+        "typical_values": spec.get("typical_values", {}),
     }
 
 
@@ -711,8 +704,8 @@ def validate_flowsheet(session_id: str) -> Dict[str, Any]:
 
     Checks for:
     - All units have connections (except feed/product)
-    - No orphan ports
-    - Property package compatibility
+    - No orphan ports (required ports not connected)
+    - Property package compatibility (session package vs unit compatibility)
     - DOF status
 
     Args:
@@ -736,29 +729,128 @@ def validate_flowsheet(session_id: str) -> Dict[str, Any]:
     # Check DOF
     total_dof = 0
     for unit_id, unit_inst in session.units.items():
-        try:
-            spec = get_unit_spec(unit_inst.unit_type)
-            required = len(spec.required_fixes)
+        spec = get_unit_spec(unit_inst.unit_type)
+        if "error" not in spec:
+            required = len(spec.get("required_fixes", []))
             fixed = len(unit_inst.fixed_vars)
             unit_dof = required - fixed
             total_dof += unit_dof
             if unit_dof > 0:
                 warnings.append(f"Unit '{unit_id}' has {unit_dof} unfixed DOF")
-        except KeyError:
-            pass
 
     if total_dof != 0:
         issues.append(f"Total DOF = {total_dof} (should be 0)")
 
-    # Check for unconnected units
+    # Build connection maps for port checking
     connected_units = set()
+    connected_ports = {}  # {unit_id: set of connected port names}
     for conn in session.connections:
         connected_units.add(conn.source_unit)
         connected_units.add(conn.dest_unit)
 
+        # Track which ports are connected
+        if conn.source_unit not in connected_ports:
+            connected_ports[conn.source_unit] = set()
+        connected_ports[conn.source_unit].add(conn.source_port)
+
+        if conn.dest_unit not in connected_ports:
+            connected_ports[conn.dest_unit] = set()
+        connected_ports[conn.dest_unit].add(conn.dest_port)
+
+    # Check for unconnected units
     for unit_id in session.units:
         if unit_id not in connected_units and len(session.units) > 1:
             warnings.append(f"Unit '{unit_id}' has no connections")
+
+    # Check for orphan ports (required ports not connected)
+    for unit_id, unit_inst in session.units.items():
+        spec = get_unit_spec(unit_inst.unit_type)
+        if "error" in spec:
+            continue
+
+        unit_connected_ports = connected_ports.get(unit_id, set())
+
+        # Skip Feed units - they only have outlets
+        if unit_inst.unit_type in ("Feed", "FeedZO"):
+            continue
+
+        # Skip Product units - they only have inlets
+        if unit_inst.unit_type in ("Product",):
+            continue
+
+        # Check inlet ports (except for first unit in chain which may be feed)
+        for inlet_port in spec.get("inlet_names", []):
+            if inlet_port not in unit_connected_ports:
+                # Only warn for non-feed units
+                if len(session.units) > 1:
+                    warnings.append(f"Unit '{unit_id}' inlet port '{inlet_port}' not connected")
+
+        # Check outlet ports (except for last unit in chain which may be product)
+        for outlet_port in spec.get("outlet_names", []):
+            if outlet_port not in unit_connected_ports:
+                # Only warn for non-product units
+                if len(session.units) > 1:
+                    warnings.append(f"Unit '{unit_id}' outlet port '{outlet_port}' not connected")
+
+    # Check property package compatibility
+    session_pkg = session.config.default_property_package
+    for unit_id, unit_inst in session.units.items():
+        spec = get_unit_spec(unit_inst.unit_type)
+        if "error" in spec:
+            continue
+
+        # Check if session's property package is compatible with unit
+        compatible_pkgs = spec.get("compatible_property_packages", [])
+        if compatible_pkgs:
+            if session_pkg.name not in compatible_pkgs:
+                issues.append(
+                    f"Unit '{unit_id}' ({unit_inst.unit_type}) is not compatible "
+                    f"with session property package '{session_pkg.name}'. "
+                    f"Compatible packages: {', '.join(compatible_pkgs)}"
+                )
+
+    # Check connection-level property package compatibility (translator existence)
+    # This catches cases where units with different property packages are connected
+    # without a translator in between
+    for conn in session.connections:
+        # Skip Feed connections (Feed is always compatible)
+        if conn.source_unit == "Feed":
+            continue
+
+        src_unit = session.units.get(conn.source_unit)
+        dst_unit = session.units.get(conn.dest_unit)
+
+        if not src_unit or not dst_unit:
+            continue
+
+        src_spec = get_unit_spec(src_unit.unit_type)
+        dst_spec = get_unit_spec(dst_unit.unit_type)
+
+        if "error" in src_spec or "error" in dst_spec:
+            continue
+
+        # Get compatible packages for each unit
+        src_pkgs = set(src_spec.get("compatible_property_packages", []))
+        dst_pkgs = set(dst_spec.get("compatible_property_packages", []))
+
+        # If both have restrictions and they don't overlap, translator needed
+        if src_pkgs and dst_pkgs and not (src_pkgs & dst_pkgs):
+            # Check if this connection has a translator
+            if not conn.translator_id:
+                # Check if a translator exists in the session for this connection
+                translator_exists = False
+                for trans_id, trans_config in session.translators.items():
+                    if (trans_config.get("inlet_unit") == conn.source_unit and
+                        trans_config.get("outlet_unit") == conn.dest_unit):
+                        translator_exists = True
+                        break
+
+                if not translator_exists:
+                    issues.append(
+                        f"Connection {conn.source_unit}->{conn.dest_unit} requires "
+                        f"a translator: source supports {src_pkgs}, "
+                        f"destination supports {dst_pkgs} (no overlap)"
+                    )
 
     return {
         "session_id": session_id,
@@ -793,13 +885,13 @@ def get_dof_status(session_id: str) -> Dict[str, Any]:
     unfixed_vars = {}
 
     for unit_id, unit_inst in session.units.items():
-        try:
-            spec = get_unit_spec(unit_inst.unit_type)
-        except KeyError:
+        spec = get_unit_spec(unit_inst.unit_type)
+        if "error" in spec:
             continue
 
         # Count required fixes minus actually fixed
-        required = len(spec.required_fixes)
+        required_fixes = spec.get("required_fixes", [])
+        required = len(required_fixes)
         fixed = len(unit_inst.fixed_vars)
         dof = required - fixed
 
@@ -807,8 +899,8 @@ def get_dof_status(session_id: str) -> Dict[str, Any]:
 
         if dof > 0:
             unfixed = [
-                v.name for v in spec.required_fixes
-                if v.name not in unit_inst.fixed_vars
+                v["name"] for v in required_fixes
+                if v["name"] not in unit_inst.fixed_vars
             ]
             unfixed_vars[unit_id] = unfixed
 
@@ -919,21 +1011,20 @@ def list_unfixed_vars(session_id: str, unit_id: str) -> Dict[str, Any]:
         return {"error": f"Unit '{unit_id}' not found"}
 
     unit_inst = session.units[unit_id]
-    try:
-        spec = get_unit_spec(unit_inst.unit_type)
-    except KeyError:
+    spec = get_unit_spec(unit_inst.unit_type)
+    if "error" in spec:
         return {"error": f"Unknown unit type: {unit_inst.unit_type}"}
 
     unfixed = []
-    for v in spec.required_fixes:
-        if v.name not in unit_inst.fixed_vars:
+    for v in spec.get("required_fixes", []):
+        if v["name"] not in unit_inst.fixed_vars:
             unfixed.append({
-                "name": v.name,
-                "description": v.description,
-                "units": v.units,
-                "typical_default": v.typical_default,
-                "typical_min": v.typical_min,
-                "typical_max": v.typical_max,
+                "name": v["name"],
+                "description": v.get("description"),
+                "units": v.get("units"),
+                "typical_default": v.get("typical_default"),
+                "typical_min": v.get("typical_min"),
+                "typical_max": v.get("typical_max"),
             })
 
     return {
@@ -970,17 +1061,16 @@ def get_scaling_status(session_id: str) -> Dict[str, Any]:
     for unit_id, unit_inst in session.units.items():
         scaling_by_unit[unit_id] = unit_inst.scaling_factors
 
-        try:
-            spec = get_unit_spec(unit_inst.unit_type)
+        spec = get_unit_spec(unit_inst.unit_type)
+        if "error" not in spec:
             # Recommend defaults not yet applied
+            default_scaling = spec.get("default_scaling", {})
             recs = {
-                k: v for k, v in spec.default_scaling.items()
+                k: v for k, v in default_scaling.items()
                 if k not in unit_inst.scaling_factors
             }
             if recs:
                 recommendations[unit_id] = recs
-        except KeyError:
-            pass
 
     return {
         "session_id": session_id,
@@ -2426,12 +2516,22 @@ def load_zo_parameters(
             "error": f"Failed to load parameters: {e}",
         }
 
+    # Persist loaded parameters to session (Codex recommendation)
+    # Store database, process_subtype, and loaded parameter values
+    unit_inst.zo_config["database"] = database
+    unit_inst.zo_config["process_subtype"] = process_subtype
+    unit_inst.zo_config["parameters_loaded"] = parameters_loaded
+
+    # Save session with updated unit config
+    session_manager.save(session)
+
     return {
         "session_id": session_id,
         "unit_id": unit_id,
         "database": database,
         "process_subtype": process_subtype,
         "parameters_loaded": parameters_loaded,
+        "persisted": True,
         "success": True,
     }
 
@@ -2947,6 +3047,354 @@ def get_unit_results(
     }
 
 
+# ============================================================================
+# COSTING TOOLS
+# ============================================================================
+
+
+@mcp.tool()
+def enable_costing(
+    session_id: str,
+    costing_package: str = "watertap",
+    electricity_cost: Optional[float] = None,
+    plant_lifetime: Optional[int] = None,
+    utilization_factor: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Enable costing for the flowsheet.
+
+    Creates a system-level costing block (WaterTAPCosting or ZeroOrderCosting)
+    that aggregates unit costs and calculates LCOW.
+
+    Args:
+        session_id: Session to enable costing for
+        costing_package: Costing package to use ("watertap" or "zero_order")
+        electricity_cost: Electricity cost in $/kWh (default: 0.07)
+        plant_lifetime: Plant lifetime in years (default: 30)
+        utilization_factor: Plant utilization factor (default: 1.0)
+
+    Returns:
+        Confirmation with costing configuration
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    # Validate costing package
+    valid_packages = ["watertap", "zero_order"]
+    if costing_package not in valid_packages:
+        return {
+            "error": f"Invalid costing_package '{costing_package}'. Must be one of: {valid_packages}"
+        }
+
+    # Build costing config
+    costing_config = {
+        "package": costing_package,
+        "enabled": True,
+    }
+
+    # Add optional parameters if provided
+    if electricity_cost is not None:
+        costing_config["electricity_cost"] = electricity_cost
+    if plant_lifetime is not None:
+        costing_config["plant_lifetime"] = plant_lifetime
+    if utilization_factor is not None:
+        costing_config["utilization_factor"] = utilization_factor
+
+    # Save to session
+    session.costing_config = costing_config
+    session_manager.save(session)
+
+    return {
+        "session_id": session_id,
+        "costing_enabled": True,
+        "costing_package": costing_package,
+        "config": costing_config,
+        "note": "Use add_unit_costing() to enable costing on specific units, then solve() to calculate costs.",
+    }
+
+
+@mcp.tool()
+def add_unit_costing(session_id: str, unit_id: str) -> Dict[str, Any]:
+    """Enable costing for a specific unit.
+
+    Marks a unit to have a UnitModelCostingBlock created during model build.
+    The unit's costing will be aggregated into the flowsheet's total costs.
+
+    Args:
+        session_id: Session containing the unit
+        unit_id: Unit to enable costing for
+
+    Returns:
+        Confirmation of costing enabled for unit
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    if unit_id not in session.units:
+        return {"error": f"Unit '{unit_id}' not found in session"}
+
+    # Check if flowsheet costing is enabled
+    if not session.costing_config or not session.costing_config.get("enabled"):
+        return {
+            "error": "Flowsheet costing not enabled. Call enable_costing() first.",
+            "suggestion": "enable_costing(session_id, costing_package='watertap')",
+        }
+
+    # Enable costing on the unit
+    session.units[unit_id].costing_enabled = True
+    session_manager.save(session)
+
+    return {
+        "session_id": session_id,
+        "unit_id": unit_id,
+        "costing_enabled": True,
+        "costing_package": session.costing_config.get("package", "watertap"),
+    }
+
+
+@mcp.tool()
+def disable_unit_costing(session_id: str, unit_id: str) -> Dict[str, Any]:
+    """Disable costing for a specific unit.
+
+    Args:
+        session_id: Session containing the unit
+        unit_id: Unit to disable costing for
+
+    Returns:
+        Confirmation of costing disabled for unit
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    if unit_id not in session.units:
+        return {"error": f"Unit '{unit_id}' not found in session"}
+
+    session.units[unit_id].costing_enabled = False
+    session_manager.save(session)
+
+    return {
+        "session_id": session_id,
+        "unit_id": unit_id,
+        "costing_enabled": False,
+    }
+
+
+@mcp.tool()
+def set_costing_parameters(
+    session_id: str,
+    electricity_cost: Optional[float] = None,
+    plant_lifetime: Optional[int] = None,
+    utilization_factor: Optional[float] = None,
+    membrane_cost: Optional[float] = None,
+    factor_total_investment: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Set costing parameters for the flowsheet.
+
+    Updates financial/economic parameters used in LCOW calculation.
+
+    Args:
+        session_id: Session to update
+        electricity_cost: Electricity cost in $/kWh
+        plant_lifetime: Plant lifetime in years
+        utilization_factor: Plant utilization factor (0-1)
+        membrane_cost: Membrane cost in $/m2 (for RO/NF units)
+        factor_total_investment: Total investment factor multiplier
+
+    Returns:
+        Updated costing configuration
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    if not session.costing_config:
+        return {
+            "error": "Costing not enabled. Call enable_costing() first.",
+        }
+
+    # Update parameters
+    if electricity_cost is not None:
+        session.costing_config["electricity_cost"] = electricity_cost
+    if plant_lifetime is not None:
+        session.costing_config["plant_lifetime"] = plant_lifetime
+    if utilization_factor is not None:
+        session.costing_config["utilization_factor"] = utilization_factor
+    if membrane_cost is not None:
+        session.costing_config["membrane_cost"] = membrane_cost
+    if factor_total_investment is not None:
+        session.costing_config["factor_total_investment"] = factor_total_investment
+
+    session_manager.save(session)
+
+    return {
+        "session_id": session_id,
+        "costing_config": session.costing_config,
+    }
+
+
+@mcp.tool()
+def list_costed_units(session_id: str) -> Dict[str, Any]:
+    """List all units with costing enabled.
+
+    Args:
+        session_id: Session to check
+
+    Returns:
+        List of units with costing status
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    units_status = []
+    for unit_id, unit_inst in session.units.items():
+        units_status.append({
+            "unit_id": unit_id,
+            "unit_type": unit_inst.unit_type,
+            "costing_enabled": unit_inst.costing_enabled,
+        })
+
+    return {
+        "session_id": session_id,
+        "flowsheet_costing_enabled": bool(
+            session.costing_config and session.costing_config.get("enabled")
+        ),
+        "costing_package": (
+            session.costing_config.get("package") if session.costing_config else None
+        ),
+        "units": units_status,
+        "costed_count": sum(1 for u in units_status if u["costing_enabled"]),
+    }
+
+
+@mcp.tool()
+def compute_costing(
+    session_id: str,
+    product_stream_unit: Optional[str] = None,
+    product_stream_port: str = "permeate",
+) -> Dict[str, Any]:
+    """Compute costing for the flowsheet after solving.
+
+    This tool:
+    1. Builds the model with costing blocks
+    2. Calls cost_process() to aggregate costs
+    3. Adds LCOW calculation using the specified product stream
+
+    Args:
+        session_id: Session to compute costing for
+        product_stream_unit: Unit containing product stream (auto-detected if None)
+        product_stream_port: Port name for product flow (default: "permeate")
+
+    Returns:
+        Computed costing results including LCOW, CapEx, OpEx
+    """
+    try:
+        session = session_manager.load(session_id)
+    except FileNotFoundError:
+        return {"error": f"Session '{session_id}' not found"}
+
+    if not session.costing_config or not session.costing_config.get("enabled"):
+        return {
+            "error": "Costing not enabled. Call enable_costing() first.",
+        }
+
+    try:
+        from utils.model_builder import ModelBuilder, ModelBuildError
+        from pyomo.environ import value
+
+        builder = ModelBuilder(session)
+        m = builder.build()
+    except ImportError as e:
+        return {
+            "session_id": session_id,
+            "error": f"WaterTAP/IDAES not available: {e}",
+        }
+    except Exception as e:
+        return {
+            "session_id": session_id,
+            "error": f"Model build failed: {e}",
+        }
+
+    # Check if costing block was created
+    if not hasattr(m.fs, "costing"):
+        return {
+            "session_id": session_id,
+            "error": "Costing block not created. Ensure units have costing enabled.",
+        }
+
+    costing_block = m.fs.costing
+
+    # Extract costing results
+    results = {
+        "session_id": session_id,
+        "costing_computed": True,
+    }
+
+    try:
+        # Total capital cost
+        if hasattr(costing_block, "total_capital_cost"):
+            results["total_capital_cost"] = value(
+                costing_block.total_capital_cost, exception=False
+            )
+
+        # Total operating cost
+        if hasattr(costing_block, "total_operating_cost"):
+            results["total_operating_cost"] = value(
+                costing_block.total_operating_cost, exception=False
+            )
+
+        # LCOW
+        if hasattr(costing_block, "LCOW"):
+            results["LCOW"] = value(costing_block.LCOW, exception=False)
+
+        # Specific energy consumption
+        if hasattr(costing_block, "specific_energy_consumption"):
+            results["specific_energy_consumption"] = value(
+                costing_block.specific_energy_consumption, exception=False
+            )
+
+        # Aggregate electricity
+        if hasattr(costing_block, "aggregate_flow_electricity"):
+            results["aggregate_electricity"] = value(
+                costing_block.aggregate_flow_electricity, exception=False
+            )
+
+        # Unit-level costs
+        unit_costs = {}
+        units = builder.get_units()
+        for unit_id, unit_block in units.items():
+            if hasattr(unit_block, "costing"):
+                unit_costing = unit_block.costing
+                unit_cost_data = {}
+
+                if hasattr(unit_costing, "capital_cost"):
+                    unit_cost_data["capital_cost"] = value(
+                        unit_costing.capital_cost, exception=False
+                    )
+                if hasattr(unit_costing, "fixed_operating_cost"):
+                    unit_cost_data["fixed_operating_cost"] = value(
+                        unit_costing.fixed_operating_cost, exception=False
+                    )
+
+                if unit_cost_data:
+                    unit_costs[unit_id] = unit_cost_data
+
+        if unit_costs:
+            results["unit_costs"] = unit_costs
+
+    except Exception as e:
+        results["extraction_error"] = str(e)[:100]
+
+    return results
+
+
 @mcp.tool()
 def get_costing(session_id: str) -> Dict[str, Any]:
     """Get costing results including LCOW.
@@ -3116,22 +3564,34 @@ def get_unit_requirements(unit_type: str) -> Dict[str, Any]:
     Returns:
         Unit requirements including DOF, scaling, and initialization hints
     """
-    spec = get_unit_spec(unit_type)
-    if spec is None:
+    try:
+        spec = get_unit_spec_from_registry(unit_type)
+    except KeyError:
         return {"error": f"Unknown unit type: {unit_type}"}
 
     return {
         "unit_type": unit_type,
         "category": spec.category.name if spec.category else None,
         "dof_requirements": {
-            "required_fixes": spec.required_fixes,
+            "required_fixes": [
+                {
+                    "name": v.name,
+                    "description": v.description,
+                    "units": v.units,
+                    "typical_default": v.typical_default,
+                }
+                for v in spec.required_fixes
+            ],
             "typical_values": spec.typical_values,
         },
         "scaling": {
             "default_factors": spec.default_scaling,
         },
         "initialization": {
-            "init_hints": spec.init_hints,
+            "init_hints": {
+                "method": spec.init_hints.method.value if spec.init_hints else None,
+                "requires_state_args": spec.init_hints.requires_state_args if spec.init_hints else False,
+            } if spec.init_hints else None,
         },
         "ports": {
             "inlets": spec.n_inlets,

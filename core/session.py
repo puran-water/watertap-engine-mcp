@@ -72,6 +72,10 @@ class UnitInstance:
     config: Dict[str, Any] = field(default_factory=dict)
     fixed_vars: Dict[str, float] = field(default_factory=dict)
     scaling_factors: Dict[str, float] = field(default_factory=dict)
+    # Zero-order specific config (database, process_subtype, loaded parameters)
+    zo_config: Dict[str, Any] = field(default_factory=dict)
+    # Costing configuration
+    costing_enabled: bool = False
 
 
 @dataclass
@@ -148,6 +152,9 @@ class FlowsheetSession:
     # DOF tracking
     dof_status: Dict[str, int] = field(default_factory=dict)
     total_dof: int = 0
+
+    # Costing configuration
+    costing_config: Optional[Dict[str, Any]] = None
 
     def add_unit(
         self,
@@ -367,6 +374,7 @@ class FlowsheetSession:
             "results": _serialize_dict_keys(self.results),
             "dof_status": self.dof_status,
             "total_dof": self.total_dof,
+            "costing_config": self.costing_config,
         }
 
     @classmethod
@@ -395,6 +403,7 @@ class FlowsheetSession:
             results=_deserialize_dict_keys(data.get("results")),
             dof_status=data.get("dof_status", {}),
             total_dof=data.get("total_dof", 0),
+            costing_config=data.get("costing_config"),
         )
 
 
