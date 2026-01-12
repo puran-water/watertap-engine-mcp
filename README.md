@@ -387,7 +387,7 @@ watertap-engine-mcp/
 │   ├── nf_softening.py
 │   └── mvc_crystallizer.py
 ├── jobs/                       # Session/job persistence (runtime)
-└── tests/                      # 350+ tests
+└── tests/                      # 373 tests
 ```
 
 ## Companion Skill

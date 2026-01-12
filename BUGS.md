@@ -105,3 +105,47 @@
 - Initialization tests: SequentialDecomposition behavior verification
 
 ---
+
+## Test Session: 2026-01-11 (Session 2)
+
+**Code Review Feedback Audit:**
+- Reviewed 10 code review claims against actual codebase
+- 8 of 10 claims were inaccurate (code already correct)
+- 2 valid issues identified and fixed:
+  1. Recovery module integrated into HygienePipeline failure handling
+  2. Results source indication added to get_stream_results/get_unit_results
+
+**New Tests Added:**
+- `tests/test_solver.py`: TestRecoveryIntegration class (5 tests)
+- `tests/e2e/test_results_source.py`: Results source indication tests (4 tests)
+
+---
+
+## Test Session: 2026-01-12
+
+**Code Review Remediation Plan Completed (7 Phases):**
+
+All phases from `docs/plans/code-review-remediation-plan.md` implemented:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Variable path resolution using `find_component()` | COMPLETE |
+| 2 | CLI stub remediation (4 commands fixed) | COMPLETE |
+| 3 | validate_flowsheet enhancement (4 checks) | COMPLETE |
+| 4 | Costing implementation (6 tools) | COMPLETE |
+| 5 | ZO parameters persistence | COMPLETE |
+| 6 | Test coverage (4 new test files) | COMPLETE |
+| 7 | Documentation updates | COMPLETE |
+
+**New Test Files:**
+- `tests/test_path_resolution.py` - Variable path resolution tests
+- `tests/test_validate_flowsheet.py` - Validation tests
+- `tests/test_costing.py` - Costing workflow tests
+- `tests/test_cli_parity.py` - CLI/Server parity tests
+
+**Final State:**
+- 373 tests passing
+- 57 MCP tools implemented
+- All Codex review findings addressed
+
+---

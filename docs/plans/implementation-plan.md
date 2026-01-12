@@ -1,5 +1,9 @@
 # WaterTAP-Engine-MCP Server Implementation Plan
 
+**STATUS: COMPLETED** - Server fully implemented with 57 tools.
+
+---
+
 ## Overview
 
 Build a WaterTAP-engine-MCP server analogous to qsdsan-engine-mcp, exposing the full WaterTAP unit library with explicit solver operations. Domain intelligence (DOF suggestions, translator selection, failure diagnosis) resides in a **companion agent skill**, not the server.
