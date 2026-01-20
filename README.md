@@ -11,7 +11,7 @@ WaterTAP provides sophisticated equation-oriented models for water treatment pro
 
 WaterTAP Engine MCP inverts this paradigm by making **natural language the primary interface**. Instead of manually managing DOF, scaling, and initialization, engineers can work with a companion skill that orchestrates these operations:
 
-> "Build a seawater RO system with 100 m3/hr feed at 35,000 mg/L TDS, 50 m2 membrane area, and explain why recovery is limited"
+> "Evaluate hardness removal (IX or lime/soda softening) upstream of RO in this ZLD flowsheet: compare regenerant and chemical costs against natural gas savings from reduced evaporator thermal load, and calculate the IRR on incremental pre-treatment CAPEX."
 
 This enables:
 
@@ -331,7 +331,7 @@ Configure in your MCP client (e.g., Claude Desktop `config.json`):
 ```
 
 Then use natural language with the companion skill:
-> "Create a seawater RO system treating 100 m3/hr at 35,000 mg/L TDS and solve for 50% recovery"
+> "Evaluate hardness removal upstream of RO in this ZLD flowsheet and calculate the IRR on incremental pre-treatment CAPEX based on reduced evaporator thermal load."
 
 ## Installation
 
