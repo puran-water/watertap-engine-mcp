@@ -1,0 +1,76 @@
+{
+  "job_id": "ab4b203f-aa31-43d1-a1d4-6526007cbd3e",
+  "session_id": "cc0dc46d-2207-4e20-bc83-d0220ca8f322",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-11T15:21:44.724742+00:00",
+  "started_at": "2026-01-11T15:21:44.735942+00:00",
+  "completed_at": "2026-01-11T15:21:52.592525+00:00",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24979533.209126733
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24979533.209126733
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24958566.624993414
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": -2289694.194454877
+          },
+          "deltaP": {
+            "0.0": -20966.584133318494
+          },
+          "efficiency_pump": {
+            "0.0": 0.75
+          }
+        }
+      }
+    }
+  },
+  "error": null,
+  "pid": 80132
+}

@@ -1,0 +1,14 @@
+{
+  "job_id": "2fe65603-6333-4010-afb1-9ab05d3c1c5c",
+  "session_id": "c1ce5502-33bc-43b0-a0ab-28009730ff24",
+  "job_type": "solve",
+  "status": "failed",
+  "progress": 60,
+  "message": "Initializing flowsheet...",
+  "created_at": "2026-01-11T04:14:14.545350",
+  "started_at": "2026-01-11T04:14:14.554191",
+  "completed_at": "2026-01-11T04:14:22.477498",
+  "result": null,
+  "error": "IDAES SequentialDecomposition failed: IDAES SequentialDecomposition failed. This may indicate a problem with the flowsheet structure. Error: 'SequentialDecomposition' object has no attribute 'get_ssc_order'. Check flowsheet structure.",
+  "pid": 183772
+}

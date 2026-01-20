@@ -1,0 +1,39 @@
+{
+  "config": {
+    "session_id": "ad3b1fbc-121c-442b-b5d2-97aa83aed022",
+    "name": "Test RO 2",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T03:54:01.820341",
+    "updated_at": "2026-01-11T03:54:01.820341"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": {
+    "flow_vol_m3_hr": 100.0,
+    "temperature_C": 25.0,
+    "pressure_bar": 1.0,
+    "components": {
+      "TDS": 35000.0
+    },
+    "state_args": {
+      "flow_mass_phase_comp": {
+        "('Liq', 'H2O')": 26.805555555555554,
+        "('Liq', 'TDS')": 0.9722222222222222
+      },
+      "temperature": 298.15,
+      "pressure": 100000.0
+    }
+  },
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

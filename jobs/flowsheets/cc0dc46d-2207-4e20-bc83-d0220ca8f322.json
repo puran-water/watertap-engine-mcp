@@ -1,0 +1,117 @@
+{
+  "config": {
+    "session_id": "cc0dc46d-2207-4e20-bc83-d0220ca8f322",
+    "name": "",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T15:21:44.625531+00:00",
+    "updated_at": "2026-01-11T15:21:52.596521+00:00"
+  },
+  "status": "solved",
+  "units": {
+    "Feed": {
+      "unit_id": "Feed",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {
+        "properties[0].flow_mass_phase_comp[Liq,H2O]": 0.965,
+        "properties[0].flow_mass_phase_comp[Liq,TDS]": 0.035,
+        "properties[0].temperature": 298.15,
+        "properties[0].pressure": 101325.0
+      },
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.75,
+        "control_volume.properties_out[0].pressure": 500000.0
+      },
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": "optimal",
+  "solve_message": null,
+  "results": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24979533.209126733
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24979533.209126733
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.99218126073,
+              "(0.0, 'Liq', 'TDS')": 1517.286335958672
+            },
+            "temperature": {
+              "0.0": 583.1390057602845
+            },
+            "pressure": {
+              "0.0": 24958566.624993414
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": -2289694.194454877
+          },
+          "deltaP": {
+            "0.0": -20966.584133318494
+          },
+          "efficiency_pump": {
+            "0.0": 0.75
+          }
+        }
+      }
+    }
+  },
+  "dof_status": {},
+  "total_dof": 0
+}

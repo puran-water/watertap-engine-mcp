@@ -1,0 +1,80 @@
+{
+  "config": {
+    "session_id": "1e0de0e3-c3a4-48e6-953a-ce98323d3be7",
+    "name": "",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T15:21:53.598771+00:00",
+    "updated_at": "2026-01-11T15:22:01.511935+00:00"
+  },
+  "status": "solved",
+  "units": {
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    }
+  },
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": "optimal",
+  "solve_message": null,
+  "results": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 336.07511613841297,
+              "(0.0, 'Liq', 'TDS')": 11.333300733944101
+            },
+            "temperature": {
+              "0.0": 573.0136124115487
+            },
+            "pressure": {
+              "0.0": 25160772.45158045
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 336.07511613841297,
+              "(0.0, 'Liq', 'TDS')": 11.333300733944101
+            },
+            "temperature": {
+              "0.0": 573.0136124115487
+            },
+            "pressure": {
+              "0.0": 24806140.83897407
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": 75.00708573793915
+          },
+          "deltaP": {
+            "0.0": -354631.61260637897
+          },
+          "efficiency_pump": {
+            "0.0": -2300.817589757943
+          }
+        }
+      }
+    }
+  },
+  "dof_status": {},
+  "total_dof": 0
+}

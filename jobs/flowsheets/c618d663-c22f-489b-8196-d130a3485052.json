@@ -1,0 +1,24 @@
+{
+  "config": {
+    "session_id": "c618d663-c22f-489b-8196-d130a3485052",
+    "name": "",
+    "description": "",
+    "default_property_package": "NaClParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:02:15.293642",
+    "updated_at": "2026-01-11T14:02:15.293642"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

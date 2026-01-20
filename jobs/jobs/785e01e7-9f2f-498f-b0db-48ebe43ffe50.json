@@ -1,0 +1,14 @@
+{
+  "job_id": "785e01e7-9f2f-498f-b0db-48ebe43ffe50",
+  "session_id": "b4e084df-3176-40a5-85ef-b26468eb543f",
+  "job_type": "solve",
+  "status": "failed",
+  "progress": 20,
+  "message": "Building flowsheet...",
+  "created_at": "2026-01-11T14:05:35.598594",
+  "started_at": "2026-01-11T14:05:35.607713",
+  "completed_at": "2026-01-11T14:05:43.061873",
+  "result": null,
+  "error": "Model build failed: Build failed: ModelBuildError: Cannot create property package PropertyPackageType.MCAS: MCAS property package requires 'solute_list' in config. Set property_package_config with solute definitions.. WaterTAP must be properly installed.",
+  "pid": 173788
+}

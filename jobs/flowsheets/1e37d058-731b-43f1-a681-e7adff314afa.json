@@ -1,0 +1,24 @@
+{
+  "config": {
+    "session_id": "1e37d058-731b-43f1-a681-e7adff314afa",
+    "name": "",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T16:48:56.136650+00:00",
+    "updated_at": "2026-01-12T16:48:56.136650+00:00"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

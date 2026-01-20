@@ -1,0 +1,87 @@
+{
+  "config": {
+    "session_id": "f8435cd5-d292-4b90-9e4d-973bb65e99c1",
+    "name": "NaCl Test",
+    "description": "",
+    "default_property_package": "NaClParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T04:15:07.944220",
+    "updated_at": "2026-01-11T12:39:59.480165"
+  },
+  "status": "building",
+  "units": {
+    "Feed1": {
+      "unit_id": "Feed1",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.8,
+        "control_volume.properties_out[0].pressure": 6000000.0
+      },
+      "scaling_factors": {}
+    },
+    "RO1": {
+      "unit_id": "RO1",
+      "unit_type": "ReverseOsmosis0D",
+      "config": {},
+      "fixed_vars": {
+        "A_comp[0,H2O]": 4.2e-12,
+        "B_comp[0,NaCl]": 3.5e-08,
+        "area": 50.0,
+        "permeate.pressure[0]": 101325.0,
+        "feed_side.cp_modulus[0,NaCl]": 1.0
+      },
+      "scaling_factors": {
+        "A_comp[0,H2O]": 1000000000000.0
+      }
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed1",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    },
+    {
+      "source_unit": "Pump1",
+      "source_port": "outlet",
+      "dest_unit": "RO1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": {
+    "flow_vol_m3_hr": 50.0,
+    "temperature_C": 25.0,
+    "pressure_bar": 1.0,
+    "components": {
+      "NaCl": 35.0
+    },
+    "state_args": {
+      "flow_mass_phase_comp": {
+        "('Liq', 'H2O')": 13.888402777777776,
+        "('Liq', 'NaCl')": 0.00048611111111111115
+      },
+      "temperature": 298.15,
+      "pressure": 100000.0
+    }
+  },
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

@@ -1,0 +1,47 @@
+{
+  "config": {
+    "session_id": "137a24a5-7e86-4476-abbc-17a2f8c8143d",
+    "name": "",
+    "description": "",
+    "default_property_package": "NaClParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:03:59.014117",
+    "updated_at": "2026-01-11T14:03:59.046393"
+  },
+  "status": "building",
+  "units": {
+    "Feed": {
+      "unit_id": "Feed",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

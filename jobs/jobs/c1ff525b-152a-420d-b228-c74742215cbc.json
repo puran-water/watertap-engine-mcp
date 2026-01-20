@@ -1,0 +1,76 @@
+{
+  "job_id": "c1ff525b-152a-420d-b228-c74742215cbc",
+  "session_id": "40848f87-4877-44fa-8779-a91b75718e5d",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-11T14:28:58.920831",
+  "started_at": "2026-01-11T14:28:58.932962",
+  "completed_at": "2026-01-11T14:29:05.945197",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.98818310885,
+              "(0.0, 'Liq', 'TDS')": 1517.2865846339491
+            },
+            "temperature": {
+              "0.0": 583.1390063210958
+            },
+            "pressure": {
+              "0.0": 24979533.20734135
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.98818310885,
+              "(0.0, 'Liq', 'TDS')": 1517.2865846339491
+            },
+            "temperature": {
+              "0.0": 583.1390063210958
+            },
+            "pressure": {
+              "0.0": 24979533.20734135
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 54302.98818310885,
+              "(0.0, 'Liq', 'TDS')": 1517.2865846339491
+            },
+            "temperature": {
+              "0.0": 583.1390063210958
+            },
+            "pressure": {
+              "0.0": 24958566.621422425
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": -2146588.3335073176
+          },
+          "deltaP": {
+            "0.0": -20966.585918922967
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        }
+      }
+    }
+  },
+  "error": null,
+  "pid": 81460
+}

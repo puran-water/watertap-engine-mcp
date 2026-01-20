@@ -1,0 +1,37 @@
+{
+  "config": {
+    "session_id": "ed69f3ea-791e-45d2-b10f-596afdfd3d2f",
+    "name": "",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {
+      "solute_list": [
+        "Na_+",
+        "Cl_-"
+      ],
+      "charge": {
+        "Na_+": 1,
+        "Cl_-": -1
+      },
+      "mw_data": {
+        "Na_+": 0.023,
+        "Cl_-": 0.0355
+      }
+    },
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T13:48:47.845438",
+    "updated_at": "2026-01-11T13:48:47.845438"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

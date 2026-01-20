@@ -1,0 +1,14 @@
+{
+  "job_id": "ea7b46fc-a1fc-4652-b0fe-f876f6470169",
+  "session_id": "f8435cd5-d292-4b90-9e4d-973bb65e99c1",
+  "job_type": "solve",
+  "status": "failed",
+  "progress": 60,
+  "message": "Initializing flowsheet...",
+  "created_at": "2026-01-11T04:33:51.882232",
+  "started_at": "2026-01-11T04:33:51.894014",
+  "completed_at": "2026-01-11T04:34:01.060596",
+  "result": null,
+  "error": "IDAES SequentialDecomposition failed: IDAES SequentialDecomposition failed. This may indicate a problem with the flowsheet structure. Error: Solver 'cplex' (solver_io=None) is not available, please pass a different solver. Check flowsheet structure.",
+  "pid": 46236
+}

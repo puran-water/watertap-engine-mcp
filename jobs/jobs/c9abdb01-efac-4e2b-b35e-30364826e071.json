@@ -1,0 +1,113 @@
+{
+  "job_id": "c9abdb01-efac-4e2b-b35e-30364826e071",
+  "session_id": "8b765d5f-f182-4ecb-ab8c-0aa8c2b30420",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-11T14:32:21.529846",
+  "started_at": "2026-01-11T14:32:21.538346",
+  "completed_at": "2026-01-11T14:32:27.797632",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4302404.56447923
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4302404.56447923
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4308506.007240075
+            }
+          }
+        },
+        "Pump2": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4308506.007240075
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4307452.238984452
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": 86.89644489089703
+          },
+          "deltaP": {
+            "0.0": 6101.442760845263
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        },
+        "Pump2": {
+          "work_mechanical": {
+            "0.0": -15.00771518175915
+          },
+          "deltaP": {
+            "0.0": -1053.7682556232146
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        }
+      }
+    }
+  },
+  "error": null,
+  "pid": 145484
+}

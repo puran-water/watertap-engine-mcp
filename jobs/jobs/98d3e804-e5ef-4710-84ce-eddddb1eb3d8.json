@@ -1,0 +1,76 @@
+{
+  "job_id": "98d3e804-e5ef-4710-84ce-eddddb1eb3d8",
+  "session_id": "056ae647-7a81-450d-bcb4-237d492d15d7",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-11T14:04:54.476615",
+  "started_at": "2026-01-11T14:04:54.484765",
+  "completed_at": "2026-01-11T14:05:03.390682",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 389.93027493127215,
+              "(0.0, 'Liq', 'TDS')": 1.809093012944372
+            },
+            "temperature": {
+              "0.0": 646.4396770535706
+            },
+            "pressure": {
+              "0.0": 24891088.6372451
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 389.93027493127215,
+              "(0.0, 'Liq', 'TDS')": 1.809093012944372
+            },
+            "temperature": {
+              "0.0": 646.4396770535706
+            },
+            "pressure": {
+              "0.0": 24891088.6372451
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 389.93027493127215,
+              "(0.0, 'Liq', 'TDS')": 1.809093012944372
+            },
+            "temperature": {
+              "0.0": 646.4396770535706
+            },
+            "pressure": {
+              "0.0": 24853590.616074022
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": -33000.18137878611
+          },
+          "deltaP": {
+            "0.0": -37498.021171075314
+          },
+          "efficiency_pump": {
+            "0.0": 1.0489155583002265
+          }
+        }
+      }
+    }
+  },
+  "error": null,
+  "pid": 112932
+}

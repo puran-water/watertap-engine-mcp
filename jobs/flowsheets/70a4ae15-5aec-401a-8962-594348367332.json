@@ -1,0 +1,56 @@
+{
+  "config": {
+    "session_id": "70a4ae15-5aec-401a-8962-594348367332",
+    "name": "E2E Test 2 - Zero Order",
+    "description": "",
+    "default_property_package": "WaterParameterBlock_ZO",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:29:30.850606",
+    "updated_at": "2026-01-11T14:30:06.109980"
+  },
+  "status": "solved",
+  "units": {
+    "FeedZO": {
+      "unit_id": "FeedZO",
+      "unit_type": "FeedZO",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "PumpZO": {
+      "unit_id": "PumpZO",
+      "unit_type": "PumpZO",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "FeedZO",
+      "source_port": "outlet",
+      "dest_unit": "PumpZO",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": "optimal",
+  "solve_message": null,
+  "results": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {},
+      "units": {}
+    }
+  },
+  "dof_status": {},
+  "total_dof": 0
+}

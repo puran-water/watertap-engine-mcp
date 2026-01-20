@@ -1,0 +1,166 @@
+{
+  "config": {
+    "session_id": "8b765d5f-f182-4ecb-ab8c-0aa8c2b30420",
+    "name": "E2E Test 4 - NaCl Multi-Unit",
+    "description": "",
+    "default_property_package": "NaClParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:31:30.514714",
+    "updated_at": "2026-01-11T14:32:27.799712"
+  },
+  "status": "solved",
+  "units": {
+    "Feed": {
+      "unit_id": "Feed",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.8,
+        "control_volume.properties_out[0].pressure": 300000.0
+      },
+      "scaling_factors": {}
+    },
+    "Pump2": {
+      "unit_id": "Pump2",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.8,
+        "control_volume.properties_out[0].pressure": 600000.0
+      },
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    },
+    {
+      "source_unit": "Pump1",
+      "source_port": "outlet",
+      "dest_unit": "Pump2",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": "optimal",
+  "solve_message": null,
+  "results": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4302404.56447923
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4302404.56447923
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4308506.007240075
+            }
+          }
+        },
+        "Pump2": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4308506.007240075
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 11.262614499488876,
+              "(0.0, 'Liq', 'NaCl')": 0.29073041434260694
+            },
+            "temperature": {
+              "0.0": 319.71158331419747
+            },
+            "pressure": {
+              "0.0": 4307452.238984452
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": 86.89644489089703
+          },
+          "deltaP": {
+            "0.0": 6101.442760845263
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        },
+        "Pump2": {
+          "work_mechanical": {
+            "0.0": -15.00771518175915
+          },
+          "deltaP": {
+            "0.0": -1053.7682556232146
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        }
+      }
+    }
+  },
+  "dof_status": {},
+  "total_dof": 0
+}

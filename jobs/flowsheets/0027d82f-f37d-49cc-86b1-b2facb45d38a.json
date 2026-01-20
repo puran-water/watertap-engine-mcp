@@ -1,0 +1,25 @@
+{
+  "config": {
+    "session_id": "0027d82f-f37d-49cc-86b1-b2facb45d38a",
+    "name": "CLISession",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T17:15:30.095832+00:00",
+    "updated_at": "2026-01-12T17:15:30.095832+00:00"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0,
+  "costing_config": null
+}

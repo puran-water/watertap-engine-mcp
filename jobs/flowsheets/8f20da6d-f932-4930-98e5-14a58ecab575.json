@@ -1,0 +1,92 @@
+{
+  "config": {
+    "session_id": "8f20da6d-f932-4930-98e5-14a58ecab575",
+    "name": "Full Test",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T03:54:58.183096",
+    "updated_at": "2026-01-11T03:57:36.786389"
+  },
+  "status": "building",
+  "units": {
+    "Feed1": {
+      "unit_id": "Feed1",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump": 0.8,
+        "outlet.pressure": 6000000.0
+      },
+      "scaling_factors": {}
+    },
+    "RO1": {
+      "unit_id": "RO1",
+      "unit_type": "ReverseOsmosis0D",
+      "config": {},
+      "fixed_vars": {
+        "A_comp": 4.2e-12,
+        "B_comp": 3.5e-08,
+        "area": 50.0,
+        "permeate.pressure": 101325.0,
+        "permeate.pressure[0]": 101325.0
+      },
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed1",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    },
+    {
+      "source_unit": "Feed1",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    },
+    {
+      "source_unit": "Pump1",
+      "source_port": "outlet",
+      "dest_unit": "RO1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": {
+    "flow_vol_m3_hr": 100.0,
+    "temperature_C": 25.0,
+    "pressure_bar": 1.0,
+    "components": {
+      "TDS": 35000.0
+    },
+    "state_args": {
+      "flow_mass_phase_comp": {
+        "('Liq', 'H2O')": 26.805555555555554,
+        "('Liq', 'TDS')": 0.9722222222222222
+      },
+      "temperature": 298.15,
+      "pressure": 100000.0
+    }
+  },
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

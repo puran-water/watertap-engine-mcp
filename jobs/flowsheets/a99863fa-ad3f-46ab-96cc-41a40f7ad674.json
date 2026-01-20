@@ -1,0 +1,25 @@
+{
+  "config": {
+    "session_id": "a99863fa-ad3f-46ab-96cc-41a40f7ad674",
+    "name": "Test Session with spaces & symbols!",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T17:17:14.280599+00:00",
+    "updated_at": "2026-01-12T17:17:14.280599+00:00"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0,
+  "costing_config": null
+}

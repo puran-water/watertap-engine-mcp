@@ -1,0 +1,23 @@
+{
+  "job_id": "2271029c-cd74-4937-b789-76f6b78bcbfa",
+  "session_id": "70a4ae15-5aec-401a-8962-594348367332",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-11T14:29:58.920436",
+  "started_at": "2026-01-11T14:29:58.930062",
+  "completed_at": "2026-01-11T14:30:06.108981",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {},
+      "units": {}
+    }
+  },
+  "error": null,
+  "pid": 149496
+}

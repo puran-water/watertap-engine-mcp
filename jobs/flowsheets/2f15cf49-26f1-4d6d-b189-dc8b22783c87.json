@@ -1,0 +1,128 @@
+{
+  "config": {
+    "session_id": "2f15cf49-26f1-4d6d-b189-dc8b22783c87",
+    "name": "E2E Test 3 - MCAS",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {
+      "solute_list": [
+        "Na_+",
+        "Cl_-"
+      ],
+      "charge": {
+        "Na_+": 1,
+        "Cl_-": -1
+      },
+      "mw_data": {
+        "Na_+": 0.023,
+        "Cl_-": 0.0355
+      }
+    },
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:30:27.542752",
+    "updated_at": "2026-01-11T14:31:06.939324"
+  },
+  "status": "solved",
+  "units": {
+    "Feed": {
+      "unit_id": "Feed",
+      "unit_type": "Feed",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    },
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.8,
+        "control_volume.properties_out[0].pressure": 500000.0
+      },
+      "scaling_factors": {}
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed",
+      "source_port": "outlet",
+      "dest_unit": "Pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": "optimal",
+  "solve_message": null,
+  "results": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mol_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 68278.5464971338,
+              "(0.0, 'Liq', 'Na_+')": 62620.172354890645,
+              "(0.0, 'Liq', 'Cl_-')": 64219.29351551539
+            },
+            "temperature": {
+              "0.0": 323.15
+            },
+            "pressure": {
+              "0.0": 860401832.4528295
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mol_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 68278.5464971338,
+              "(0.0, 'Liq', 'Na_+')": 62620.172354890645,
+              "(0.0, 'Liq', 'Cl_-')": 64219.29351551539
+            },
+            "temperature": {
+              "0.0": 323.15
+            },
+            "pressure": {
+              "0.0": 860401832.4528295
+            }
+          },
+          "outlet": {
+            "flow_mol_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 68278.5464971338,
+              "(0.0, 'Liq', 'Na_+')": 62620.172354890645,
+              "(0.0, 'Liq', 'Cl_-')": 64219.29351551539
+            },
+            "temperature": {
+              "0.0": 323.15
+            },
+            "pressure": {
+              "0.0": 860401832.4528301
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": 3.688191719421279e-06
+          },
+          "deltaP": {
+            "0.0": 5.821831905450379e-07
+          },
+          "efficiency_pump": {
+            "0.0": 0.8
+          }
+        }
+      }
+    }
+  },
+  "dof_status": {},
+  "total_dof": 0
+}

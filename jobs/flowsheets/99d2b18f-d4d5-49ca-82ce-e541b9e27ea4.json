@@ -1,0 +1,35 @@
+{
+  "config": {
+    "session_id": "99d2b18f-d4d5-49ca-82ce-e541b9e27ea4",
+    "name": "",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T17:17:05.277381+00:00",
+    "updated_at": "2026-01-12T17:17:05.290893+00:00"
+  },
+  "status": "building",
+  "units": {
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {},
+      "zo_config": {},
+      "costing_enabled": false
+    }
+  },
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0,
+  "costing_config": null
+}

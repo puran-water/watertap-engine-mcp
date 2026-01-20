@@ -1,0 +1,32 @@
+{
+  "config": {
+    "session_id": "f7d21fa2-17ea-44a2-b535-080a6aeaf5e2",
+    "name": "E2E Test 5 - Expected Failure",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:33:05.319293",
+    "updated_at": "2026-01-11T14:33:17.090825"
+  },
+  "status": "building",
+  "units": {
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    }
+  },
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

@@ -1,5 +1,8 @@
 # WaterTAP Engine MCP
 
+> **⚠️ DEVELOPMENT STATUS: This project is under active development and is not yet production-ready. APIs, interfaces, and functionality may change without notice. Use at your own risk for evaluation and testing purposes only. Not recommended for production deployments.**
+
+
 A water treatment process simulation engine exposing [WaterTAP](https://github.com/watertap-org/watertap) capabilities through dual adapters for AI agent integration.
 
 ## Motivation

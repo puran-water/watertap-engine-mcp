@@ -1,0 +1,68 @@
+{
+  "config": {
+    "session_id": "1bb7a48f-e1c1-4769-a3ff-019451992e1e",
+    "name": "",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T17:10:13.519650+00:00",
+    "updated_at": "2026-01-12T17:10:13.544753+00:00"
+  },
+  "status": "building",
+  "units": {
+    "pump1": {
+      "unit_id": "pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.75,
+        "deltaP[0]": 100000
+      },
+      "scaling_factors": {},
+      "zo_config": {},
+      "costing_enabled": true
+    }
+  },
+  "connections": [
+    {
+      "source_unit": "Feed",
+      "source_port": "outlet",
+      "dest_unit": "pump1",
+      "dest_port": "inlet",
+      "translator_id": null
+    }
+  ],
+  "translators": {},
+  "feed_state": {
+    "flow_vol_m3_hr": 3.6,
+    "temperature_C": 25.0,
+    "pressure_bar": 1.0,
+    "components": {
+      "TDS": 35000
+    },
+    "concentration_units": "mg/L",
+    "concentration_basis": "mass",
+    "component_charges": null,
+    "electroneutrality_species": null,
+    "state_args": {
+      "flow_mass_phase_comp": {
+        "('Liq', 'H2O')": 0.965,
+        "('Liq', 'TDS')": 0.035
+      },
+      "temperature": 298.15,
+      "pressure": 100000.0
+    }
+  },
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0,
+  "costing_config": {
+    "package": "watertap",
+    "enabled": true
+  }
+}

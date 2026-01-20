@@ -1,0 +1,24 @@
+{
+  "config": {
+    "session_id": "540c6d08-d231-429a-9b5c-59dcedf49535",
+    "name": "MCAS Test",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T12:39:05.364168",
+    "updated_at": "2026-01-11T12:39:05.364168"
+  },
+  "status": "created",
+  "units": {},
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}

@@ -1,0 +1,37 @@
+{
+  "config": {
+    "session_id": "50cf8bd9-38ed-42e3-b429-c257ad7bf79f",
+    "name": "",
+    "description": "",
+    "default_property_package": "SeawaterParameterBlock",
+    "property_packages": {},
+    "property_package_config": {},
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-12T17:14:27.621152+00:00",
+    "updated_at": "2026-01-12T17:14:27.624163+00:00"
+  },
+  "status": "building",
+  "units": {
+    "pump1": {
+      "unit_id": "pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {
+        "efficiency_pump[0]": 0.75
+      },
+      "scaling_factors": {},
+      "zo_config": {},
+      "costing_enabled": false
+    }
+  },
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0,
+  "costing_config": null
+}

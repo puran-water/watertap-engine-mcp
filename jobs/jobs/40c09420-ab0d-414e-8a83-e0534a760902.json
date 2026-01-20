@@ -1,0 +1,76 @@
+{
+  "job_id": "40c09420-ab0d-414e-8a83-e0534a760902",
+  "session_id": "8b583a77-e9d6-4bd4-af27-1d83bdc327a7",
+  "job_type": "solve",
+  "status": "completed",
+  "progress": 100,
+  "message": "Solve completed successfully",
+  "created_at": "2026-01-12T17:16:39.358055+00:00",
+  "started_at": "2026-01-12T17:16:39.383746+00:00",
+  "completed_at": "2026-01-12T17:16:51.436437+00:00",
+  "result": {
+    "solver_status": "ok",
+    "termination_condition": "optimal",
+    "solve_time": null,
+    "iterations": null,
+    "kpis": {
+      "streams": {
+        "Feed": {
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 0.965,
+              "(0.0, 'Liq', 'TDS')": 0.035
+            },
+            "temperature": {
+              "0.0": 298.15
+            },
+            "pressure": {
+              "0.0": 101325.0
+            }
+          }
+        },
+        "Pump1": {
+          "inlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 0.965,
+              "(0.0, 'Liq', 'TDS')": 0.035
+            },
+            "temperature": {
+              "0.0": 298.15
+            },
+            "pressure": {
+              "0.0": 101325.0
+            }
+          },
+          "outlet": {
+            "flow_mass_phase_comp": {
+              "(0.0, 'Liq', 'H2O')": 0.965,
+              "(0.0, 'Liq', 'TDS')": 0.035
+            },
+            "temperature": {
+              "0.0": 298.15
+            },
+            "pressure": {
+              "0.0": 500000.0
+            }
+          }
+        }
+      },
+      "units": {
+        "Pump1": {
+          "work_mechanical": {
+            "0.0": 519.33043059562
+          },
+          "deltaP": {
+            "0.0": 398675.00000000006
+          },
+          "efficiency_pump": {
+            "0.0": 0.75
+          }
+        }
+      }
+    }
+  },
+  "error": null,
+  "pid": 74792
+}

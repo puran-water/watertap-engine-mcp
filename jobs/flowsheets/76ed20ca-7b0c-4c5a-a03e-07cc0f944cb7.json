@@ -1,0 +1,45 @@
+{
+  "config": {
+    "session_id": "76ed20ca-7b0c-4c5a-a03e-07cc0f944cb7",
+    "name": "",
+    "description": "",
+    "default_property_package": "MCASParameterBlock",
+    "property_packages": {},
+    "property_package_config": {
+      "solute_list": [
+        "Na_+",
+        "Cl_-"
+      ],
+      "charge": {
+        "Na_+": 1,
+        "Cl_-": -1
+      },
+      "mw_data": {
+        "Na_+": 0.023,
+        "Cl_-": 0.0355
+      }
+    },
+    "solver": "ipopt",
+    "solver_options": {},
+    "created_at": "2026-01-11T14:04:54.490862",
+    "updated_at": "2026-01-11T14:04:54.497406"
+  },
+  "status": "building",
+  "units": {
+    "Pump1": {
+      "unit_id": "Pump1",
+      "unit_type": "Pump",
+      "config": {},
+      "fixed_vars": {},
+      "scaling_factors": {}
+    }
+  },
+  "connections": [],
+  "translators": {},
+  "feed_state": null,
+  "solve_status": null,
+  "solve_message": null,
+  "results": null,
+  "dof_status": {},
+  "total_dof": 0
+}
