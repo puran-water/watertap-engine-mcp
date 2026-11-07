@@ -2,7 +2,17 @@
 
 Build and solve steady-state process flowsheets using WaterTAP, IDAES and Pyomo, with structured solver diagnostics.
 
-Experimental v0.1.0. These tools return calculations and structured evidence; the calling LLM supplies explanations and reporting. Engineering review remains necessary.
+Experimental release series; `v0.1.0` is the initial pinned release and `main` follows current development. These tools return calculations and structured evidence; the calling LLM supplies explanations and reporting. Engineering review remains necessary.
+
+## Use it in an engineering workflow
+
+**A steady-state process question.** Define a supported flowsheet, feed basis, equipment specification and operating conditions. Inspect solver diagnostics, constraints and stream results.
+
+A successful solve is specific to its model and assumptions; unavailable solver capabilities and infeasibility must be resolved explicitly.
+
+This is a public calculation component of [Puran Water's engineering toolchain](https://github.com/puran-water). The working system connects these tools to sizing-to-balance, proposal and BEP procedures and retained Studio review publications. Those internal workflows and project records are separate from this standalone package.
+
+Have a project that needs engineering interpretation or an independent review? [Work with Puran Water](https://puranwater.com/contact/). To report a software defect, open a repository issue with a minimal synthetic or redacted input, package revision, expected result and actual result.
 
 ## Quick start
 
