@@ -7,3 +7,7 @@ Required upstream copyright and attribution are reproduced verbatim. No endorsem
 QSDsan-derived biology models, stoichiometric resources and shared kinetic contracts: https://github.com/QSD-Group/QSDsan — University of Illinois/NCSA; notice retained.
 
 WaterTAP-derived model adapters: https://github.com/watertap-org/watertap — BSD-style WaterTAP license including its enhancement clause; notice retained.
+
+Electrodialysis topology adaptation: watertap-org/Electrodialysis_Experiment
+https://github.com/watertap-org/Electrodialysis_Experiment
+See THIRD-PARTY-NOTICES/Electrodialysis-Experiment-BSD.txt for the retained license.

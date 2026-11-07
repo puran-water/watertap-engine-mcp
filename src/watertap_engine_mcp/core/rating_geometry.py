@@ -50,7 +50,7 @@ def template_geometry(template_name, config):
 
     def need(field, unit):
         value = config.get(field)
-        kind = 'CSTR_Injection' if field.startswith('aerobic') else 'CSTR' if name.startswith('asm2d') else 'Separator: AnMBR membrane' if field == 'membrane_particulate_passage' else 'AnMBR retained-solids SRT' if field == 'target_srt_days' else 'AD' if name.startswith('adm1') else 'ReverseOsmosis0D' if name == 'ro_train' else 'Nanofiltration0D' if name == 'nf_softening' else 'Evaporator'
+        kind = 'CSTR_Injection' if field.startswith('aerobic') else 'CSTR' if name.startswith('asm2d') else 'Separator: AnMBR membrane' if field == 'membrane_particulate_passage' else 'AnMBR retained-solids SRT' if field == 'target_srt_days' else 'AD' if name.startswith('adm1') else 'ReverseOsmosis0D' if name == 'ro_train' else 'Nanofiltration0D' if name == 'nf_softening' else 'Electrodialysis1D' if name.startswith('ed_') else 'Evaporator'
         values[field] = (require_number(value, field, unit, f'{name} ({kind})'), unit)
     if name.startswith('asm2d'):
         if name == 'asm2d_mbr_aerobic':
@@ -119,13 +119,25 @@ def template_geometry(template_name, config):
             raise RatingGeometryError(f'{name}: target_brine_mass_fraction releases evaporator_area_m2 [m2]; use design_flowsheet explicitly. Stage (b) supplies geometry for rating.')
         if name == 'mvc_crystallizer':
             raise RatingGeometryError('mvc_crystallizer: fixed crystallizer volume_suspension [m3] rating is not qualified; stage (b) must supply crystallizer geometry and the owner must select its rating formulation. The residence-time/yield model designs geometry and cannot be reported as rating.')
+    elif name in {'ed_k_stage_series', 'ed_stack_conc_recirc'}:
+        if name == 'ed_k_stage_series':
+            pairs = config.get('stage_cell_pairs')
+            if not isinstance(pairs, list) or not pairs:
+                raise RatingGeometryError(f'{name}: stage (b) must supply stage_cell_pairs [count] per stack')
+            for index, value in enumerate(pairs):
+                field = f'stage_cell_pairs[{index}]'
+                values[field] = (require_number(value, field, 'count', f'{name} (Electrodialysis1D)'), 'count')
+        else:
+            need('cell_pairs', 'count')
+        for field, unit in (('cell_width_m', 'm'), ('cell_length_m', 'm'), ('channel_height_m', 'm'), ('spacer_porosity', 'fraction'), ('membrane_thickness_m', 'm')):
+            need(field, unit)
     else:
         raise RatingGeometryError(f'{name}: no stage (b) geometry rating contract is registered')
     evidence = validate_bindings(values, config, name)
     return {'analysis_mode': 'rating', 'template_name': name, 'geometry_inputs': values, **evidence}
-GEOMETRY_VARIABLES = frozenset({'area', 'volume', 'volume_liquid', 'volume_vapor', 'headspace_wetted_area', 'volume_suspension', 'bed_depth', 'bed_length', 'reactor_volume', 'length', 'channel_height', 'cell_width', 'cell_length', 'crystal_median_length', 'spacer_porosity', 'membrane_thickness', 'spacer_mixing_length', 'resin_diam', 'bed_porosity', 'cell_triplet_num'})
+GEOMETRY_VARIABLES = frozenset({'area', 'volume', 'volume_liquid', 'volume_vapor', 'headspace_wetted_area', 'volume_suspension', 'bed_depth', 'bed_length', 'reactor_volume', 'length', 'channel_height', 'cell_width', 'cell_length', 'crystal_median_length', 'spacer_porosity', 'membrane_thickness', 'spacer_mixing_length', 'resin_diam', 'bed_porosity', 'cell_triplet_num', 'cell_pair_num'})
 GEOMETRY_UNITS = {name: 'm' for name in GEOMETRY_VARIABLES}
-GEOMETRY_UNITS.update({'area': 'm2', 'volume': 'm3', 'volume_liquid': 'm3', 'volume_vapor': 'm3', 'headspace_wetted_area': 'm2', 'volume_suspension': 'm3', 'reactor_volume': 'm3', 'spacer_porosity': 'dimensionless', 'bed_porosity': 'dimensionless', 'cell_triplet_num': 'count'})
+GEOMETRY_UNITS.update({'area': 'm2', 'volume': 'm3', 'volume_liquid': 'm3', 'volume_vapor': 'm3', 'headspace_wetted_area': 'm2', 'volume_suspension': 'm3', 'reactor_volume': 'm3', 'spacer_porosity': 'dimensionless', 'bed_porosity': 'dimensionless', 'cell_triplet_num': 'count', 'cell_pair_num': 'count'})
 
 def _split_fraction_index(var_name):
     """``split_fraction[0,permeate,X_su]`` -> ("permeate", "X_su"), else None."""
@@ -175,6 +187,7 @@ def _bind_srt_target(target_srt_days, session_spec):
     if not math.isclose(compiled, float(target_srt_days), rel_tol=1e-12, abs_tol=1e-12):
         raise RatingGeometryError(f'{constraint.get('name')}: compiled SRT target {compiled} d differs from stage (b) target_srt_days={target_srt_days}')
     return {'unit_id': constraint.get('waste_unit'), 'var_name': None, 'kind': 'process_constraint_target', 'constraint': constraint.get('name'), 'value': compiled, 'unit_type': 'retained-solids SRT closure', 'source_field': 'target_srt_days', 'unit': 'd'}
+_ED_GEOMETRY_FIELDS = {'cell_pair_num': None, 'cell_width': 'cell_width_m', 'cell_length': 'cell_length_m', 'channel_height': 'channel_height_m', 'spacer_porosity': 'spacer_porosity', 'membrane_thickness': 'membrane_thickness_m'}
 
 def bind_native_geometry(contract, session_spec):
     """Capture the exact fixed native geometry after template compilation."""
@@ -196,6 +209,11 @@ def bind_native_geometry(contract, session_spec):
             field = 'headspace_wetted_area_m2'
         elif variable == 'area':
             field = 'evaporator_area_m2' if unit['unit_type'] == 'Evaporator' else 'membrane_area_m2'
+        elif unit['unit_type'] == 'Electrodialysis1D' and variable in _ED_GEOMETRY_FIELDS:
+            if variable == 'cell_pair_num':
+                field = f'stage_cell_pairs[{int(fix['unit_id'].split('_')[-1]) - 1}]' if fix['unit_id'].startswith('ED_') else 'cell_pairs'
+            else:
+                field = _ED_GEOMETRY_FIELDS[variable]
         else:
             field = None
         expected = inputs.get(field)

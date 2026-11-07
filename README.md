@@ -57,3 +57,20 @@ Built by [Puran Water](https://puranwater.com).
 Historical source-suite snapshot: 1926 passed, 53 failed, 6 skipped, 2 error. These counts predate the cleaned standalone export; they are not its qualification result. Later repairs covered selected subsets only. See [historical quality scope](HISTORICAL-QUALITY.md).
 
 Bundled feedstock input presets are excluded. Supply a complete influent basis; classification names alone do not provide a design input dataset.
+
+## Following current development
+
+The `main` branch receives approved development fixes through a one-way source
+mirror. Publication still checks secrets, private content, redistribution rights
+and package boundaries. Version tags such as `v0.1.0` remain immutable. Installed
+copies do not update automatically. To upgrade the server and its public support
+package together from the current branches in your existing environment:
+
+```sh
+uv pip install --upgrade --reinstall \
+  "puran-mcp-support[simulation] @ git+https://github.com/puran-water/fluids-mcp.git@main#subdirectory=support/puran-mcp-support" \
+  "watertap-engine-mcp @ git+https://github.com/puran-water/watertap-engine-mcp.git@main"
+```
+
+Pin both Git commits when repeatability is more important than following changes.
+The mirror records the source commit in `.puran-mirror.json`.

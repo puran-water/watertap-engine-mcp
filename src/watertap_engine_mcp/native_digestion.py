@@ -194,7 +194,7 @@ def _staged_from_core(pipeline, model, core_model) -> tuple:
     return (bool(getattr(result, 'success', False)), f'staged start ({copied} values from the core start): {getattr(result, 'message', '')}')
 
 def final_equation_residual(model) -> Dict[str, Any]:
-    'Public engineering calculation interface.'
+    """Public engineering calculation interface."""
     import pyomo.environ as pyo
     worst, name, count = (0.0, None, 0)
     for constraint in model.component_data_objects(pyo.Constraint, active=True, descend_into=True):
@@ -229,6 +229,12 @@ WARM_STATE_FILL = 0.0
 
 class WarmStateMapRefusal(NativeDigestionRefusal):
     """A warm state that cannot be mapped onto today's model: a non-S/Fe Var it lacks, or a Var the model no longer has."""
+STEP_DOWN_RULE = "a declared step-down start builds the digester at its solved blend, warm from that blend's answer, and walks the co-feed share to zero through the declared steps, each warm from the last (halved on a lost step, every point recorded); no cold or dilute fallback, and a step it cannot take refuses by name with the lambda reached"
+_STEP_DOWN_KEYS = frozenset({'from', 'steps', 'ruling', 'source'})
+_STEP_DOWN_FROM_KEYS = frozenset({'asm2d_kg_m3', 'cations_kmol_m3', 'anions_kmol_m3', 'sodium_mol_l', 'calcium_mol_l', 'sulfate_mol_l', 'sulfur_iron_kg_m3', 'asm2d_fixes', 'adm1_fixes', 'biochemical_split', 'flow_m3_d', 'source'})
+
+class StepDownRefusal(NativeDigestionRefusal):
+    """A declared step-down start that cannot answer: malformed, its warm blend refused, or a step it cannot take."""
 
 def sfe_family(reaction_package) -> frozenset:
     """The index members that put a Var in the S/Fe family: the S/Fe states and the reactions the S/Fe block added."""
@@ -535,6 +541,108 @@ def translate_adm1_to_asm2d(*, flow_m3_d: float, temperature_k: float, adm1_kg_m
     out = t.properties_out[0]
     record = {'carrier': 'X_H with COD-conserving X_S/X_I redistribution', 'live_biomass_kg_cod_m3': float(pyo.value(t.live_biomass[0])), 'live_N_kg_m3': float(pyo.value(t.live_elements[0, 'N'])), 'live_P_kg_m3': float(pyo.value(t.live_elements[0, 'P'])), 'X_H_kg_cod_m3': float(pyo.value(out.conc_mass_comp['X_H'])), 'X_S_redistribution_kg_cod_m3': float(pyo.value(out.conc_mass_comp['X_S'] - t.Xch_AD1[0] - t.Xpr_AD1[0] - t.Xli_AD1[0])), 'X_I_redistribution_kg_cod_m3': float(pyo.value(out.conc_mass_comp['X_I'] - t.XI_AD1[0]))}
     return {'conc_kg_m3': {j: float(pyo.value(out.conc_mass_comp[j])) for j in out.conc_mass_comp}, 'bound_biomass_mapping': record}
+LIMITING_TERMS_RULE = "every path point and the answer record each process's inhibition product I[r] and its factors as the solved block defines them, with the residual S_IN and S_IP; a lost-branch refusal names the smallest factors at its last healthy point and the processes they limit"
+LIMITING_FACTOR_BELOW = 0.5
+LIMITING_FACTORS_SMALLEST = 3
+INHIBITION_CLOSURE_REL = 1e-05
+LIMITING_RESIDUALS = {'S_IN': 'mg N/L', 'S_IP': 'mg P/L'}
+
+def _finite(expression, pyo) -> float | None:
+    """A solved expression's value, or None where it does not evaluate to a finite number (e.g. a limitation term's
+    division at a zero residual)."""
+    try:
+        value = float(pyo.value(expression))
+    except Exception:
+        return None
+    return value if math.isfinite(value) else None
+
+def _named_product(constraint, i_var) -> List[tuple]:
+    """``(name, factor)`` of the product a library block's ``I_fun[r]`` sets ``I[r]`` to: each named Expression it
+    multiplies by its own name (``I_IP_lim``), ``exp`` of one as ``exp(<name>)`` (the library's pH term), any other
+    factor by its own text (never a guessed name); none where I is a constant."""
+    from pyomo.core.expr import MonomialTermExpression, ProductExpression, UnaryFunctionExpression
+    args = getattr(constraint.expr, 'args', ())
+    if len(args) != 2 or not any((a is i_var for a in args)):
+        return [(f'unread {str(constraint.expr)[:120]}', None)]
+    rhs = args[1] if args[0] is i_var else args[0]
+
+    def named(node):
+        return bool(getattr(node, 'is_named_expression_type', lambda: False)())
+
+    def leaves(node):
+        if isinstance(node, (int, float)):
+            return [] if node == 1 else [(f'constant {node:g}', node)]
+        if named(node):
+            return [(node.local_name, node)]
+        if isinstance(node, (ProductExpression, MonomialTermExpression)):
+            return [leaf for arg in node.args for leaf in leaves(arg)]
+        if isinstance(node, UnaryFunctionExpression) and node.getname() == 'exp' and named(node.args[0]):
+            return [(f'exp({node.args[0].local_name})', node)]
+        return [(f'unnamed {str(node)[:120]}', node)]
+    return leaves(rhs)
+
+def uptake_inhibition(rx, pyo) -> Dict[str, Any]:
+    """`LIMITING_TERMS_RULE`: on the solved reaction block ``rx``, every process whose ``I[r]`` is not the constant 1,
+    with its factors as the block defines them -- the kernel family's record (``inhibition_factors``, written beside
+    every compiled ``I_fun`` by ``chemistry.modified_adm1_kernel.record_inhibition``, named where the kernel's rate laws
+    name them), else the named Expressions the block's own ``I_fun[r]`` multiplies (`_named_product`) -- and the
+    factors' closure against ``I[r]`` (a set that does not close records its ``unexplained`` remainder); plus the
+    residual S_IN and S_IP (kg/m3) where the block reads them."""
+    recorded = getattr(rx, 'inhibition_factors', None) or {}
+    processes: Dict[str, Any] = {}
+    for r in rx.I_fun:
+        entry = recorded.get(r)
+        pairs = entry['factors'] if entry is not None else _named_product(rx.I_fun[r], rx.I[r])
+        if not pairs:
+            continue
+        factors: Dict[str, float | None] = {}
+        for name, expression in pairs:
+            key = name if name not in factors else f'{name}#{sum((k.split('#')[0] == name for k in factors)) + 1}'
+            factors[key] = None if expression is None else _finite(expression, pyo)
+        total = _finite(rx.I[r], pyo)
+        product = math.prod(factors.values()) if all((v is not None for v in factors.values())) else None
+        row = {'process': entry['process'] if entry is not None else None, 'I': total, 'factors': factors, 'closure': None if total is None or product is None else total - product}
+        if row['closure'] is None or abs(row['closure']) > INHIBITION_CLOSURE_REL * max(abs(total), 1e-30):
+            row['unexplained'] = total / product if total is not None and product else None
+        processes[str(r)] = row
+    conc = getattr(rx, 'conc_mass_comp_ref', None)
+    residual = {name: _finite(conc[name], pyo) for name in LIMITING_RESIDUALS if conc is not None and name in conc}
+    return {'processes': processes, 'residual_kg_m3': residual}
+
+def limiting_terms(record: Dict[str, Any] | None, *, below: float=LIMITING_FACTOR_BELOW, smallest: int=LIMITING_FACTORS_SMALLEST) -> List[Dict[str, Any]]:
+    """`LIMITING_TERMS_RULE`: the factors of an `uptake_inhibition` record that limit, smallest first -- the
+    ``smallest`` smallest and every other below ``below`` -- each ``{"factor", "value", "processes"}``, one factor's
+    processes together (a factor shared by several uptakes has one value); an ``unexplained`` remainder is a factor like
+    any other."""
+    groups: Dict[tuple, List[str]] = {}
+    for r, row in ((record or {}).get('processes') or {}).items():
+        label = f'{r} {row['process']}' if row.get('process') else r
+        named = dict(row['factors'])
+        if 'unexplained' in row:
+            named['unexplained'] = row['unexplained']
+        for name, value in named.items():
+            if value is not None:
+                groups.setdefault((name, float(f'{value:.6g}')), []).append(label)
+    ranked = sorted(groups.items(), key=lambda item: item[0][1])
+    return [{'factor': name, 'value': value, 'processes': labels} for i, ((name, value), labels) in enumerate(ranked) if i < smallest or value < below]
+
+def _mg_l(value: float) -> str:
+    return f'{value:.0f}' if abs(value) >= 100.0 else f'{value:.3g}'
+
+def limiting_phrase(record: Dict[str, Any] | None) -> str:
+    """`LIMITING_TERMS_RULE`: one line naming the limiting factors of an `uptake_inhibition` record (`limiting_terms`),
+    each with its value and the processes it limits, then the residual S_IN / S_IP."""
+    terms = limiting_terms(record)
+    if not terms:
+        return 'no uptake inhibition factors were recorded there'
+    residual = ', '.join((f'{name} {_mg_l(value * 1000.0)} {LIMITING_RESIDUALS[name]}' for name, value in ((record or {}).get('residual_kg_m3') or {}).items() if value is not None))
+    return 'its smallest uptake factors ' + '; '.join((f'{t['factor']} {t['value']:.3g} on {', '.join(t['processes'])}' for t in terms)) + (f'; residual {residual}' if residual else '')
+
+def lost_branch_message(lam: float, condition: str, last: Dict[str, Any]) -> str:
+    """The continuation's lost-branch refusal (``walk_step``): its first words are what ``walk_to`` and the callers
+    match (``the methanogenic branch was lost``), then the last healthy state ``last`` (a path point) and its limiting
+    factors (`limiting_phrase`), on one line (the adapter reads the worker's last ``<module>.<Name>Refusal:`` line)."""
+    return f'the methanogenic branch was lost at feed strength lambda={lam} (IPOPT {condition}) after converging at lambda={last['lambda']}: the digester at this geometry is overloaded or inhibited before the full feed; last healthy state pH {last['pH']:.3f}, VFA {last['vfa_kg_cod_m3']}; {limiting_phrase(last.get('uptake_inhibition'))}'
 
 def _digester_report(digester, pyo) -> Dict[str, Any]:
     out = digester.liquid_phase.properties_out[0]
@@ -558,6 +666,7 @@ def _digester_report(digester, pyo) -> Dict[str, Any]:
                 break
     report['speciation'] = {name: float(pyo.value(getattr(rx, name))) for name in ('S_H', 'pKW', 'pK_a_co2', 'pK_a_IN', 'pK_a_IP', 'pK_a_co3', 'conc_mol_co2', 'conc_mol_hco3', 'conc_mol_co3', 'conc_mol_nh4', 'conc_mol_nh3', 'conc_mol_h2po4', 'conc_mol_hpo4', 'conc_mol_K', 'conc_mol_Mg', 'sodium_mol_l', 'I_Na', 'conc_mol_oh', 'conc_mass_ac', 'conc_mass_pro', 'conc_mass_bu', 'conc_mass_va')}
     report['methanogen_inhibition'] = {r: float(pyo.value(rx.I[r])) for r in ('R10', 'R11')}
+    report['uptake_inhibition'] = uptake_inhibition(rx, pyo)
     from watertap_engine_mcp.chemistry.modified_adm1_phase1 import NA_INHIBITION_SOURCE
     report['sodium_inhibition_source'] = NA_INHIBITION_SOURCE
     report['chemistry_scope'] = 'phase2_davies_activity_acid_base_ion_pairs_no_minerals' if hasattr(rx, 'conc_mol_pair') else 'phase2_davies_activity_acid_base_no_ion_pairs_no_minerals'
@@ -679,10 +788,20 @@ def solve_digester(*, flow_m3_d: float, temperature_k: float, adm1_feed: Dict[st
     blend = plan.get('blend_from')
     if blend is not None and (not isinstance(blend, dict) or not str(blend.get('source') or '').strip() or (not isinstance(blend.get('conc_kg_m3'), dict))):
         raise NativeDigestionRefusal('continuation blend_from needs conc_kg_m3, its strong-ion lumps and a source')
+    step_down = plan.get('step_down')
+    if step_down is not None:
+        if blend is None or lam0 != 0.0 or warm_start is None:
+            raise StepDownRefusal(f"a step-down start is a composition homotopy from the solved blend (blend_from, lambda0 0) warm from that blend's answer (warm_start); blend_from {('given' if blend is not None else 'absent')}, lambda0 {lam0:g}, warm_start {('given' if warm_start is not None else 'absent')}")
+        if float(plan.get('inoculum_kg_cod_m3') or 0.0) or float(plan.get('buffer_share') or 0.0):
+            raise StepDownRefusal('a step-down start begins AT the solved blend: no inoculum and no buffer share')
     lam0_ok = 0 <= lam0 <= 1 if blend is not None else 0 < lam0 <= 1
     if not steps or steps[-1] != 1.0 or (not lam0_ok) or any((b <= a for a, b in zip([lam0, *steps], steps))):
         raise NativeDigestionRefusal('continuation must rise strictly from lambda0 in (0, 1] and end at lambda = 1.0')
     full = {k: max(float(v), 1e-09) for k, v in adm1_feed['conc_kg_m3'].items()}
+    if step_down is not None:
+        unheld = sorted((k for k, v in blend['conc_kg_m3'].items() if k not in full and float(v) > 1e-09))
+        if unheld:
+            raise StepDownRefusal(f"the solved blend carries {unheld}, which this feed's digester has no state for: the step-down would drop them at its start")
     sfe_named = sorted((k for k in full if (k in SFE_STATES or k in ORGANIC_SULFUR_STATES) and full[k] > 1e-09))
     if sfe_named and engine_template_name != 'adm1_cstr':
         raise NativeDigestionRefusal(f'{engine_template_name} carries no sulfur/iron state; the feed names {sfe_named} (the S/Fe digester is adm1_cstr)')
@@ -846,7 +965,7 @@ def solve_digester(*, flow_m3_d: float, temperature_k: float, adm1_feed: Dict[st
 
     def branch(lam):
         rep = _digester_report(digester, pyo)
-        return {'lambda': lam, 'pH': rep['pH'], 'vfa_kg_cod_m3': {k: rep['liquid']['conc_kg_m3'][k] for k in ('S_ac', 'S_pro', 'S_bu', 'S_va', 'S_fa')}, 'biomass_kg_cod_m3': {k: rep['liquid']['conc_kg_m3'][k] for k in ADM1_BIOMASS}}
+        return {'lambda': lam, 'pH': rep['pH'], 'vfa_kg_cod_m3': {k: rep['liquid']['conc_kg_m3'][k] for k in ('S_ac', 'S_pro', 'S_bu', 'S_va', 'S_fa')}, 'biomass_kg_cod_m3': {k: rep['liquid']['conc_kg_m3'][k] for k in ADM1_BIOMASS}, 'uptake_inhibition': rep['uptake_inhibition']}
 
     def reseed_invaders(lam):
         """A trophic group at zero satisfies its own balance whatever its substrate (X_j = 0 is always a root), so a
@@ -1024,7 +1143,7 @@ def solve_digester(*, flow_m3_d: float, temperature_k: float, adm1_feed: Dict[st
         condition = _solve(warm, model)
         attempts.append({'lambda': lam, 'stage': 'continuation', 'termination': condition, 'seconds': round(time.monotonic() - t0, 2)})
         if condition != 'optimal':
-            raise NativeDigestionRefusal(f'the methanogenic branch was lost at feed strength lambda={lam} (IPOPT {condition}) after converging at lambda={path[-1]['lambda']}: the digester at this geometry is overloaded or inhibited before the full feed; last healthy state pH {path[-1]['pH']:.3f}, VFA {path[-1]['vfa_kg_cod_m3']}')
+            raise NativeDigestionRefusal(lost_branch_message(lam, condition, path[-1]))
         reseed_invaders(lam)
         exclude_sour_root(lam)
         path.append(branch(lam))
@@ -1154,9 +1273,40 @@ def solve_digester(*, flow_m3_d: float, temperature_k: float, adm1_feed: Dict[st
             return f'the warm solve landed on a {landed.get('classification')} basin'
         path.append({**branch(1.0), 'route': "warm start from this node's previous answer in this walk"})
         return None
+
+    def step_down_path():
+        """`STEP_DOWN_RULE`: the preset at the blend (lambda 0) warm from the blend's answer, then the declared steps to
+        lambda 1, each warm from the last; refused by name, never a cold or dilute fallback."""
+        nonlocal path
+        why = _warm_mismatch(warm_start, structure)
+        if why is not None:
+            raise StepDownRefusal(f"the solved blend's answer is not a warm start for this digester: {why}")
+        sigma['value'] = 1.0
+        built = start(0.0, warm_values=warm_start['values'], lam=0.0)
+        if built is None:
+            raise StepDownRefusal(f'the warm solve AT the solved blend (lambda 0) was refused: {attempts[-1].get('message')}')
+        bind(built)
+        out = digester.liquid_phase.properties_out[0]
+        washed_now = [k for k in ADM1_BIOMASS if pyo.value(out.conc_mass_comp[k]) < WASHOUT_FLOOR_KG_M3]
+        landed = classify_digester_basin(digester)
+        if washed_now or not landed.get('is_healthy', False):
+            raise StepDownRefusal(f'the warm solve at the solved blend (lambda 0) landed {('with ' + str(washed_now) + ' washed out' if washed_now else '')}{(' on a ' + str(landed.get('classification')) + ' basin' if not landed.get('is_healthy', False) else '')}')
+        reseed_invaders(0.0)
+        exclude_sour_root(0.0)
+        path = [{**branch(0.0), 'route': 'step-down start: the solved blend, warm from its answer'}]
+        for lam in steps:
+            try:
+                walk_to(lam)
+            except NativeDigestionRefusal as exc:
+                raise StepDownRefusal(f'the step-down from the solved blend stopped at lambda={path[-1]['lambda']:g} (co-feed share {1.0 - path[-1]['lambda']:g} left) on the way to {lam:g}: {exc}') from exc
     native_start = {'ruling': WARM_START_RULING_ID, 'path': 'cold', 'fallback': None, 'warm_start_source': None if warm_start is None else warm_start.get('source')}
     t_base = time.monotonic()
-    if warm_start is None:
+    if step_down is not None:
+        first_attempt = len(attempts)
+        step_down_path()
+        native_start.update({'path': 'step_down', 'rule': STEP_DOWN_RULE, 'step_down': dict(step_down), 'steps': [p['lambda'] for p in path], 'warm_attempts': [dict(a) for a in attempts[first_attempt:first_attempt + 1]], 'warm_state_map': attempts[first_attempt].get('warm_state_map')})
+        route, sulfur_path = ('step_down', [])
+    elif warm_start is None:
         native_start['fallback'] = 'no previous answer of this node in this walk'
         route, sulfur_path = cold_path()
     else:
@@ -1453,26 +1603,55 @@ def solve_native_digestion(payload: Dict[str, Any]) -> Dict[str, Any]:
     adm1_fixes = payload.get('adm1_fixes')
     if adm1_fixes and (not str(adm1_fixes.get('source') or '').strip()):
         raise NativeDigestionRefusal("adm1_fixes override WaterTAP's mADM1 element contents and must name their source")
+
+    def translated(asm2d_kg_m3, cations, anions, fixes, adm1_fixes, split, sulfur):
+        """The native feed through the forward interface: the translator, the declared biochemical split, the walk's
+        sulfur joined as the S/Fe states."""
+        t1_fixes = fixes
+        if split:
+            if not str(split.get('source') or '').strip():
+                raise NativeDigestionRefusal("a biochemical_split re-partitions the translator's output and names its source")
+            m = _asm2d_blocks()
+            _apply_asm2d_fixes(m, fixes)
+            _apply_adm1_fixes(m.fs.rd, adm1_fixes)
+            own = interface_element_demand(m, asm2d_kg_m3)
+            t1_fixes = {**fixes, **{k: v for k, v in (('i_CSF', own['carbon_consistent_i_CSF']), ('i_CXS', own['carbon_consistent_i_CXS'])) if v is not None}}
+        t1 = translate_asm2d_to_adm1(flow_m3_d=flow, temperature_k=temperature, asm2d_kg_m3=asm2d_kg_m3, cations_kmol_m3=cations, anions_kmol_m3=anions, asm2d_fixes=t1_fixes, heaviside_k=float(heaviside['heaviside_k']), adm1_fixes=adm1_fixes)
+        if split:
+            t1 = apply_biochemical_split(t1, split, walk_fixes=fixes, t1_fixes=t1_fixes, asm2d_kg_m3=asm2d_kg_m3, adm1_fixes=adm1_fixes)
+        if sulfur:
+            t1 = {**t1, 'conc_kg_m3': {**t1['conc_kg_m3'], **sulfur}, 'walk_sulfur_kg_m3': dict(sulfur)}
+        return t1
     split = payload.get('biochemical_split')
-    t1_fixes = fixes
-    if split:
-        if not str(split.get('source') or '').strip():
-            raise NativeDigestionRefusal("a biochemical_split re-partitions the translator's output and names its source")
-        m = _asm2d_blocks()
-        _apply_asm2d_fixes(m, fixes)
-        _apply_adm1_fixes(m.fs.rd, adm1_fixes)
-        own = interface_element_demand(m, payload['asm2d_kg_m3'])
-        t1_fixes = {**fixes, **{k: v for k, v in (('i_CSF', own['carbon_consistent_i_CSF']), ('i_CXS', own['carbon_consistent_i_CXS'])) if v is not None}}
-    t1 = translate_asm2d_to_adm1(flow_m3_d=flow, temperature_k=temperature, asm2d_kg_m3=payload['asm2d_kg_m3'], cations_kmol_m3=payload['cations_kmol_m3'], anions_kmol_m3=payload['anions_kmol_m3'], asm2d_fixes=t1_fixes, heaviside_k=float(heaviside['heaviside_k']), adm1_fixes=adm1_fixes)
-    if split:
-        t1 = apply_biochemical_split(t1, split, walk_fixes=fixes, t1_fixes=t1_fixes, asm2d_kg_m3=payload['asm2d_kg_m3'], adm1_fixes=adm1_fixes)
-    if sulfur:
-        t1 = {**t1, 'conc_kg_m3': {**t1['conc_kg_m3'], **sulfur}, 'walk_sulfur_kg_m3': dict(sulfur)}
+    t1 = translated(payload['asm2d_kg_m3'], payload['cations_kmol_m3'], payload['anions_kmol_m3'], fixes, adm1_fixes, split, sulfur)
     if iron:
         t1 = {**t1, 'conc_kg_m3': {**t1['conc_kg_m3'], **iron}, 'walk_iron_kg_m3': dict(iron)}
     if struvite:
         t1 = {**t1, 'conc_kg_m3': {**t1['conc_kg_m3'], **struvite}, 'walk_struvite_kg_m3': dict(struvite)}
-    ad = _solve_with_start_fallbacks(solve_digester, dict(flow_m3_d=flow, temperature_k=temperature, adm1_feed=t1, volume_liquid_m3=payload['geometry']['volume_liquid_m3'], volume_vapor_m3=payload['geometry']['volume_vapor_m3'], evidence=payload['evidence'], continuation=payload.get('continuation'), budget_seconds=int(payload.get('budget_seconds', 600)), adm1_fixes=adm1_fixes, sodium_mol_l=float(payload.get('sodium_mol_l', 0.0)), calcium_mol_l=float(payload.get('calcium_mol_l', 0.0)), sulfate_mol_l=float(payload.get('sulfate_mol_l', 0.0)), engine_template_name=template, oxidant_inlet=payload.get('oxidant_inlet'), headspace_wetted_area_m2=payload.get('headspace_wetted_area_m2'), microaeration_bracket=payload.get('microaeration_bracket'), warm_start=payload.get('warm_start'), hydrolysis_rates_d=payload.get('hydrolysis_rates_d'), rate_temperature_basis=payload.get('rate_temperature_basis'), free_ammonia_basis=payload.get('free_ammonia_basis')))
+    continuation = payload.get('continuation')
+    step_down = payload.get('step_down')
+    if step_down is not None:
+        if not isinstance(step_down, dict) or set(step_down) - _STEP_DOWN_KEYS:
+            raise StepDownRefusal(f'step_down reads {sorted(_STEP_DOWN_KEYS)}')
+        for key in ('ruling', 'source'):
+            if not str(step_down.get(key) or '').strip():
+                raise StepDownRefusal(f'step_down declares {key}: a step-down start is a ruled, sourced path')
+        source = step_down.get('from')
+        if not isinstance(source, dict) or set(source) - _STEP_DOWN_FROM_KEYS or any((k not in source for k in ('asm2d_kg_m3', 'cations_kmol_m3', 'anions_kmol_m3', 'source'))):
+            raise StepDownRefusal(f"step_down.from is the solved blend's native feed: asm2d_kg_m3, cations_kmol_m3, anions_kmol_m3 and source required; it reads {sorted(_STEP_DOWN_FROM_KEYS)}")
+        sd_steps = [float(x) for x in step_down.get('steps') or ()]
+        if not sd_steps or sd_steps[-1] != 1.0 or any((b <= a for a, b in zip([0.0, *sd_steps], sd_steps))):
+            raise StepDownRefusal('step_down.steps rise strictly from the blend (lambda 0) and end at this feed (lambda 1.0)')
+        if payload.get('warm_start') is None:
+            raise StepDownRefusal("a step-down start needs the solved blend's answer as its warm_start")
+        if iron or struvite or payload.get('oxidant_inlet') is not None:
+            raise StepDownRefusal("a step-down start carries the feed's organics, nutrients, strong ions and sulfur; this feed's iron, recycled struvite or oxidant has no blend to start from")
+        blend_fixes = dict(source.get('asm2d_fixes') or fixes)
+        blend_adm1_fixes = source.get('adm1_fixes') or adm1_fixes
+        blend_sulfur = _walk_sulfur({'sulfur_iron_kg_m3': source.get('sulfur_iron_kg_m3'), 'sulfate_mol_l': source.get('sulfate_mol_l', 0.0)})
+        tb = translated(source['asm2d_kg_m3'], source['cations_kmol_m3'], source['anions_kmol_m3'], blend_fixes, blend_adm1_fixes, source.get('biochemical_split'), blend_sulfur)
+        continuation = {**(continuation or {}), 'lambda0': 0.0, 'steps': sd_steps, 'inoculum_kg_cod_m3': 0.0, 'buffer_share': 0.0, 'blend_from': {'conc_kg_m3': dict(tb['conc_kg_m3']), 'cations_kmol_m3': float(source['cations_kmol_m3']), 'anions_kmol_m3': float(source['anions_kmol_m3']), **{k: float(source.get(k) or 0.0) for k in ('sodium_mol_l', 'calcium_mol_l', 'sulfate_mol_l')}, 'source': str(source['source'])}, 'step_down': {'ruling': str(step_down['ruling']), 'source': str(step_down['source']), 'rule': STEP_DOWN_RULE, 'steps': sd_steps}}
+    ad = _solve_with_start_fallbacks(solve_digester, dict(flow_m3_d=flow, temperature_k=temperature, adm1_feed=t1, volume_liquid_m3=payload['geometry']['volume_liquid_m3'], volume_vapor_m3=payload['geometry']['volume_vapor_m3'], evidence=payload['evidence'], continuation=continuation, budget_seconds=int(payload.get('budget_seconds', 600)), adm1_fixes=adm1_fixes, sodium_mol_l=float(payload.get('sodium_mol_l', 0.0)), calcium_mol_l=float(payload.get('calcium_mol_l', 0.0)), sulfate_mol_l=float(payload.get('sulfate_mol_l', 0.0)), engine_template_name=template, oxidant_inlet=payload.get('oxidant_inlet'), headspace_wetted_area_m2=payload.get('headspace_wetted_area_m2'), microaeration_bracket=payload.get('microaeration_bracket'), warm_start=payload.get('warm_start'), hydrolysis_rates_d=payload.get('hydrolysis_rates_d'), rate_temperature_basis=payload.get('rate_temperature_basis'), free_ammonia_basis=payload.get('free_ammonia_basis')))
     warm_state = ad.pop('warm_state', None)
     dosed = payload.get('oxidant_inlet') is not None
     carried_s0 = dosed or WALK_ELEMENTAL_SULFUR_STATE in sulfur or bool(iron)
